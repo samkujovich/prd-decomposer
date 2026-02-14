@@ -59,3 +59,13 @@ class Epic(BaseModel):
     description: str = Field(..., description="Epic description")
     stories: list[Story] = Field(default_factory=list, description="Child stories")
     labels: list[str] = Field(default_factory=list, description="Labels/tags")
+
+
+class TicketCollection(BaseModel):
+    """Collection of epics ready for Jira import."""
+
+    epics: list[Epic] = Field(..., description="List of epics with stories")
+    metadata: dict = Field(
+        default_factory=dict,
+        description="Generation metadata (timestamp, model version, etc.)"
+    )

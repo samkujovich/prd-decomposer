@@ -141,3 +141,53 @@ def test_epic_model_with_stories():
 
     assert len(epic.stories) == 1
     assert epic.stories[0].title == "Story 1"
+
+
+def test_ticket_collection_model():
+    """Verify TicketCollection contains epics and metadata."""
+    from prd_decomposer.models import Story, Epic, TicketCollection
+
+    story = Story(
+        title="Story",
+        description="Desc",
+        acceptance_criteria=[],
+        size="S",
+        labels=[],
+        requirement_ids=[]
+    )
+    epic = Epic(
+        title="Epic",
+        description="Desc",
+        stories=[story],
+        labels=[]
+    )
+
+    collection = TicketCollection(
+        epics=[epic],
+        metadata={"generated_at": "2026-02-14", "model": "gpt-4o"}
+    )
+
+    assert len(collection.epics) == 1
+    assert collection.metadata["model"] == "gpt-4o"
+
+
+def test_ticket_collection_serialization():
+    """Verify TicketCollection round-trips through JSON."""
+    from prd_decomposer.models import Story, Epic, TicketCollection
+
+    story = Story(
+        title="Story",
+        description="Desc",
+        acceptance_criteria=["AC1"],
+        size="L",
+        labels=["backend"],
+        requirement_ids=["REQ-001"]
+    )
+    epic = Epic(title="Epic", description="Desc", stories=[story], labels=["auth"])
+    original = TicketCollection(epics=[epic], metadata={"version": "1.0"})
+
+    json_str = original.model_dump_json()
+    restored = TicketCollection.model_validate_json(json_str)
+
+    assert restored.epics[0].stories[0].size == "L"
+    assert restored.epics[0].stories[0].labels == ["backend"]
