@@ -33,3 +33,29 @@ class StructuredRequirements(BaseModel):
     )
     summary: str = Field(..., description="Brief overview of the PRD")
     source_hash: str = Field(..., description="Hash of source PRD for traceability")
+
+
+class Story(BaseModel):
+    """A Jira-compatible story."""
+
+    title: str = Field(..., description="Story title")
+    description: str = Field(..., description="Story description")
+    acceptance_criteria: list[str] = Field(
+        default_factory=list,
+        description="Acceptance criteria for the story"
+    )
+    size: Literal["S", "M", "L"] = Field(..., description="T-shirt size estimate")
+    labels: list[str] = Field(default_factory=list, description="Labels/tags")
+    requirement_ids: list[str] = Field(
+        default_factory=list,
+        description="IDs of source requirements for traceability"
+    )
+
+
+class Epic(BaseModel):
+    """A Jira-compatible epic containing stories."""
+
+    title: str = Field(..., description="Epic title")
+    description: str = Field(..., description="Epic description")
+    stories: list[Story] = Field(default_factory=list, description="Child stories")
+    labels: list[str] = Field(default_factory=list, description="Labels/tags")

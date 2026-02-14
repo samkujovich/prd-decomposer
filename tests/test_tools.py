@@ -86,3 +86,58 @@ def test_structured_requirements_serialization():
 
     assert restored.requirements[0].id == "REQ-001"
     assert restored.requirements[0].ambiguity_flags == ["Missing metrics"]
+
+
+def test_story_model_valid():
+    """Verify Story model accepts valid data."""
+    from prd_decomposer.models import Story
+
+    story = Story(
+        title="Implement login endpoint",
+        description="Create POST /auth/login endpoint",
+        acceptance_criteria=["Returns JWT on success", "Returns 401 on failure"],
+        size="M",
+        labels=["backend", "auth"],
+        requirement_ids=["REQ-001"]
+    )
+    assert story.size == "M"
+    assert "backend" in story.labels
+
+
+def test_story_invalid_size():
+    """Verify Story rejects invalid size."""
+    from prd_decomposer.models import Story
+
+    with pytest.raises(ValidationError):
+        Story(
+            title="Test",
+            description="Test",
+            acceptance_criteria=[],
+            size="XL",  # Invalid - must be S/M/L
+            labels=[],
+            requirement_ids=[]
+        )
+
+
+def test_epic_model_with_stories():
+    """Verify Epic contains stories correctly."""
+    from prd_decomposer.models import Story, Epic
+
+    story = Story(
+        title="Story 1",
+        description="Desc",
+        acceptance_criteria=[],
+        size="S",
+        labels=[],
+        requirement_ids=["REQ-001"]
+    )
+
+    epic = Epic(
+        title="Authentication Epic",
+        description="All auth-related work",
+        stories=[story],
+        labels=["auth"]
+    )
+
+    assert len(epic.stories) == 1
+    assert epic.stories[0].title == "Story 1"
