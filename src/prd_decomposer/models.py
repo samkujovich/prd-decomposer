@@ -23,3 +23,13 @@ class Requirement(BaseModel):
     priority: Literal["high", "medium", "low"] = Field(
         ..., description="Priority level"
     )
+
+
+class StructuredRequirements(BaseModel):
+    """Collection of requirements extracted from a PRD."""
+
+    requirements: list[Requirement] = Field(
+        ..., description="List of extracted requirements"
+    )
+    summary: str = Field(..., description="Brief overview of the PRD")
+    source_hash: str = Field(..., description="Hash of source PRD for traceability")
