@@ -12,7 +12,17 @@ from prd_decomposer.models import StructuredRequirements, TicketCollection
 from prd_decomposer.prompts import ANALYZE_PRD_PROMPT, DECOMPOSE_TO_TICKETS_PROMPT
 
 app = MCPApp(name="prd_decomposer", version="1.0.0")
-client = OpenAI()  # Uses OPENAI_API_KEY env var
+
+# Lazy client initialization to avoid requiring API key at import time
+_client = None
+
+
+def get_client() -> OpenAI:
+    """Get or create OpenAI client."""
+    global _client
+    if _client is None:
+        _client = OpenAI()  # Uses OPENAI_API_KEY env var
+    return _client
 
 
 @app.tool
@@ -28,7 +38,7 @@ def analyze_prd(
     source_hash = hashlib.sha256(prd_text.encode()).hexdigest()[:8]
 
     # Call LLM
-    response = client.chat.completions.create(
+    response = get_client().chat.completions.create(
         model="gpt-4o",
         messages=[
             {
@@ -65,7 +75,7 @@ def decompose_to_tickets(
     validated_input = StructuredRequirements(**requirements)
 
     # Call LLM
-    response = client.chat.completions.create(
+    response = get_client().chat.completions.create(
         model="gpt-4o",
         messages=[
             {
