@@ -63,8 +63,25 @@ Key prompts used during development:
 1. **Project scaffolding**: "Create a PRD decomposer MCP server with arcade-mcp..."
 2. **Model generation**: "Create Pydantic models for requirements and Jira tickets..."
 3. **Test generation**: "Write pytest tests validating the Pydantic models..."
-4. **Code review**: "Review this repo in its entirety and make suggestions as to where to improve..."
+4. **Code review**: See full prompt below
 5. **Security hardening**: "Address all the issues identified in the code review..."
+
+### Code Review Prompt (Principal Engineer / CTO / CPO)
+
+```
+Review this codebase as if you were a Principal Engineer, CTO, and CPO all reviewing the same PR. Give critical feedback on:
+
+- Architecture and design decisions
+- Testability and test coverage gaps
+- Security vulnerabilities or risks
+- Production-readiness concerns
+- Code quality and maintainability
+- Missing error handling or edge cases
+
+Don't hold back. Be direct about what needs to improve before this ships.
+```
+
+This prompt pattern is adapted from the [Agentic Code Reviewer](https://github.com/richhaase/agentic-code-reviewer/blob/main/CLAUDE.md) methodology.
 
 ## Quality Assurance
 
