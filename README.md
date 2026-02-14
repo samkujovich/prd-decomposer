@@ -77,6 +77,14 @@ Converts structured requirements into Jira-compatible tickets.
 - Prompt versioning for traceability (`PROMPT_VERSION`)
 - Generation timestamps and model info in outputs
 
+### Configuration
+Environment variables with `PRD_` prefix (via pydantic-settings):
+- `PRD_OPENAI_MODEL` - Model to use (default: `gpt-4o`)
+- `PRD_ANALYZE_TEMPERATURE` - Temperature for analysis (default: `0.2`)
+- `PRD_DECOMPOSE_TEMPERATURE` - Temperature for decomposition (default: `0.3`)
+- `PRD_MAX_RETRIES` - Max retry attempts, 1-10 (default: `3`)
+- `PRD_INITIAL_RETRY_DELAY` - Initial retry delay in seconds, 0-60 (default: `1.0`)
+
 ## Setup
 
 ### Prerequisites
@@ -142,7 +150,7 @@ uv run python src/prd_decomposer/server.py
 ### Run Tests
 
 ```bash
-# Unit tests (51 tests, 99% coverage)
+# Unit tests (67 tests, 98% coverage)
 uv run pytest tests/ -v
 
 # With coverage report
@@ -174,7 +182,8 @@ prd-decomposer/
 │   ├── __init__.py       # Public exports
 │   ├── server.py         # MCP server + tool definitions
 │   ├── models.py         # Pydantic models
-│   └── prompts.py        # LLM prompt templates
+│   ├── prompts.py        # LLM prompt templates
+│   └── config.py         # Settings via environment variables
 ├── agent/
 │   └── agent.py          # OpenAI Agents SDK consumer
 ├── scripts/
@@ -182,7 +191,8 @@ prd-decomposer/
 ├── tests/
 │   ├── test_tools.py     # Model tests
 │   ├── test_server.py    # Server/tool tests (mocked LLM)
-│   └── test_prompts.py   # Prompt template tests
+│   ├── test_prompts.py   # Prompt template tests
+│   └── test_config.py    # Configuration tests
 ├── samples/
 │   └── sample_prd_*.md   # 10 sample PRDs
 ├── outputs/              # Generated JSON outputs (gitignored)
