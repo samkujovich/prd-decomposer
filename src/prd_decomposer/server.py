@@ -17,6 +17,9 @@ app = MCPApp(name="prd_decomposer", version="1.0.0")
 # Lazy client initialization to avoid requiring API key at import time
 _client = None
 
+# Cache last analysis result for easy chaining
+_last_analysis: dict | None = None
+
 
 @app.tool
 def read_file(
@@ -74,20 +77,33 @@ def analyze_prd(
     # Validate with Pydantic
     validated = StructuredRequirements(**data)
 
-    return validated.model_dump()
+    # Cache for later use by decompose_to_tickets
+    global _last_analysis
+    _last_analysis = validated.model_dump()
+
+    return _last_analysis
 
 
 @app.tool
 def decompose_to_tickets(
-    requirements: Annotated[dict, "Structured requirements from analyze_prd (pass the full output dict)"]
+    requirements: Annotated[dict | None, "Structured requirements from analyze_prd. If not provided, uses the last analyze_prd result."] = None
 ) -> dict:
     """Convert structured requirements into Jira-compatible epics and stories.
 
     Produces epics with child stories, acceptance criteria, t-shirt sizing (S/M/L),
     and labels. Output is ready for Jira import.
 
-    Pass the complete output from analyze_prd as the requirements parameter.
+    If requirements is not provided, automatically uses the result from the
+    most recent analyze_prd call.
     """
+    global _last_analysis
+
+    # Use cached result if no requirements provided
+    if requirements is None:
+        if _last_analysis is None:
+            raise ValueError("No requirements provided and no previous analysis found. Run analyze_prd first.")
+        requirements = _last_analysis
+
     # Handle case where requirements might be passed as string
     if isinstance(requirements, str):
         requirements = json.loads(requirements)
