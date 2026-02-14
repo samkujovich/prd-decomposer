@@ -1,7 +1,7 @@
 """Prompt templates for PRD analysis and decomposition."""
 
 # Version for traceability - increment when prompts change
-PROMPT_VERSION = "1.0.0"
+PROMPT_VERSION = "1.1.0"
 
 ANALYZE_PRD_PROMPT = """You are a senior technical product manager. Analyze the following PRD and extract structured requirements.
 
@@ -15,7 +15,40 @@ For each requirement you identify:
    - Vague quantifiers without metrics (e.g., "fast", "scalable", "user-friendly", "easy to use")
 6. Assign priority: "high", "medium", or "low" based on language cues and business impact
 
-PRD:
+## Example
+
+**Input PRD:**
+# Feature: Password Reset
+Users must be able to reset their password via email.
+The reset flow should be fast and user-friendly.
+
+**Output:**
+{{
+  "requirements": [
+    {{
+      "id": "REQ-001",
+      "title": "Email-based password reset",
+      "description": "Users can request a password reset link sent to their registered email address",
+      "acceptance_criteria": [
+        "User can request reset from login page",
+        "Reset email sent within 30 seconds",
+        "Reset link expires after 1 hour",
+        "User can set new password via reset link"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [
+        "Vague quantifier: 'fast' - no specific latency requirement defined",
+        "Vague quantifier: 'user-friendly' - no measurable UX criteria specified"
+      ],
+      "priority": "high"
+    }}
+  ],
+  "summary": "Password reset feature allowing users to recover account access via email"
+}}
+
+---
+
+Now analyze this PRD:
 {prd_text}
 
 Return valid JSON matching this exact schema:
@@ -32,7 +65,7 @@ Return valid JSON matching this exact schema:
     }}
   ],
   "summary": "Brief 1-2 sentence overview of the PRD",
-  "source_hash": "Use first 8 chars of a hash of the PRD text"
+  "source_hash": "Will be set by the system"
 }}"""
 
 

@@ -46,3 +46,11 @@ def test_prompts_are_formattable():
         requirements_json='{"requirements": []}'
     )
     assert '{"requirements": []}' in formatted_decompose
+
+
+def test_analyze_prd_prompt_has_example():
+    """Verify ANALYZE_PRD_PROMPT contains a few-shot example."""
+    assert "## Example" in ANALYZE_PRD_PROMPT
+    assert "ambiguity_flags" in ANALYZE_PRD_PROMPT
+    # Example should demonstrate ambiguity detection
+    assert "Vague quantifier" in ANALYZE_PRD_PROMPT
