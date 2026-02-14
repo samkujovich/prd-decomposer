@@ -205,6 +205,28 @@ prd-decomposer/
 └── AI_USAGE.md           # AI attribution
 ```
 
+## Future Iterations
+
+### Document Source Integrations
+Currently PRDs must be local markdown files. Future versions could pull directly from:
+- **Google Docs** - Where most PRDs live in practice
+- **Notion** - Popular for product teams
+- **Confluence** - Enterprise standard
+
+### Jira Integration
+Output is currently Jira-compatible JSON. Next step: actual ticket creation via Atlassian API, composing with [Arcade's Jira toolkit](https://docs.arcade.ai/tools/atlassian).
+
+### Auto-Commenting on Ambiguities
+When the tool flags something as ambiguous, automatically leave a comment on the source document (Google Docs comment, Notion comment, Confluence inline comment) asking for clarification—closing the feedback loop without human copy-paste.
+
+### Expanded Analysis Categories
+Ambiguity detection is just the start. The same pattern could flag:
+- **Incompleteness** - Missing sections (error handling, edge cases, rollback plan)
+- **Edge case coverage** - Scenarios the PRD doesn't address
+- **Design questions** - Technical decisions that need engineering input before implementation
+- **UX concerns** - Flows that might frustrate users (too many steps, unclear affordances)
+- **Security considerations** - Auth, data handling, PII that needs review
+
 ## License
 
 MIT
