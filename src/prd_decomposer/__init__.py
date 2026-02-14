@@ -21,8 +21,8 @@ from prd_decomposer.prompts import (
 __all__ = [
     "ANALYZE_PRD_PROMPT",
     "DECOMPOSE_TO_TICKETS_PROMPT",
-    "Epic",
     "PROMPT_VERSION",
+    "Epic",
     "Requirement",
     "Settings",
     "Story",

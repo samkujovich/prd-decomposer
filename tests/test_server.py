@@ -16,8 +16,6 @@ from prd_decomposer.server import (
     _call_llm_with_retry,
     _decompose_to_tickets_impl,
     _is_path_allowed,
-    analyze_prd,
-    decompose_to_tickets,
     get_client,
     read_file,
 )
