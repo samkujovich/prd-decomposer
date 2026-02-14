@@ -241,7 +241,13 @@ def _decompose_to_tickets_impl(
     client = client or get_client()
     settings = settings or get_settings()
 
-    # Handle case where requirements might be passed as string
+    # Check for None or empty input first
+    if requirements is None or requirements == "":
+        raise ValueError(
+            "Requirements cannot be empty. Pass the JSON output from analyze_prd as a string."
+        )
+
+    # Handle case where requirements is passed as string (expected for MCP)
     if isinstance(requirements, str):
         try:
             requirements = json.loads(requirements)
@@ -302,16 +308,16 @@ def _decompose_to_tickets_impl(
 
 @app.tool
 def decompose_to_tickets(
-    requirements: Annotated[dict, "Structured requirements from analyze_prd (required)"],
+    requirements_json: Annotated[str, "JSON string of the structured requirements from analyze_prd"],
 ) -> dict:
     """Convert structured requirements into Jira-compatible epics and stories.
 
     Produces epics with child stories, acceptance criteria, t-shirt sizing (S/M/L),
     and labels. Output is ready for Jira import.
 
-    Requires the requirements dict from analyze_prd to be passed explicitly.
+    Pass the complete JSON output from analyze_prd as a string.
     """
-    return _decompose_to_tickets_impl(requirements)
+    return _decompose_to_tickets_impl(requirements_json)
 
 
 if __name__ == "__main__":
