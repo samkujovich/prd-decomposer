@@ -18,7 +18,8 @@ async def main() -> None:
         params=MCPServerStdioParams(
             command="uv",
             args=["run", "python", str(server_path)]
-        )
+        ),
+        client_session_timeout_seconds=120  # LLM calls can take 30+ seconds
     ) as mcp_server:
 
         agent = Agent(
