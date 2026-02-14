@@ -1,3 +1,6 @@
+"""PRD Decomposer: MCP server for PRD analysis and ticket generation."""
+
+from prd_decomposer.config import Settings, get_settings
 from prd_decomposer.models import (
     Epic,
     Requirement,
@@ -18,10 +21,12 @@ from prd_decomposer.prompts import (
 __all__ = [
     "ANALYZE_PRD_PROMPT",
     "DECOMPOSE_TO_TICKETS_PROMPT",
-    "PROMPT_VERSION",
     "Epic",
+    "PROMPT_VERSION",
     "Requirement",
+    "Settings",
     "Story",
     "StructuredRequirements",
     "TicketCollection",
+    "get_settings",
 ]
