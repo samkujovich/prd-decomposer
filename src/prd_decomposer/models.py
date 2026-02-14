@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
@@ -65,7 +65,7 @@ class TicketCollection(BaseModel):
     """Collection of epics ready for Jira import."""
 
     epics: list[Epic] = Field(..., description="List of epics with stories")
-    metadata: dict = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="Generation metadata (timestamp, model version, etc.)"
     )

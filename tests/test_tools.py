@@ -1,11 +1,17 @@
 import pytest
 from pydantic import ValidationError
 
+from prd_decomposer.models import (
+    Epic,
+    Requirement,
+    Story,
+    StructuredRequirements,
+    TicketCollection,
+)
+
 
 def test_requirement_model_valid():
     """Verify Requirement model accepts valid data."""
-    from prd_decomposer.models import Requirement
-
     req = Requirement(
         id="REQ-001",
         title="User authentication",
@@ -22,8 +28,6 @@ def test_requirement_model_valid():
 
 def test_requirement_invalid_priority():
     """Verify Requirement rejects invalid priority."""
-    from prd_decomposer.models import Requirement
-
     with pytest.raises(ValidationError):
         Requirement(
             id="REQ-001",
@@ -38,8 +42,6 @@ def test_requirement_invalid_priority():
 
 def test_structured_requirements_model():
     """Verify StructuredRequirements validates nested requirements."""
-    from prd_decomposer.models import Requirement, StructuredRequirements
-
     req = Requirement(
         id="REQ-001",
         title="Test requirement",
@@ -62,8 +64,6 @@ def test_structured_requirements_model():
 
 def test_structured_requirements_serialization():
     """Verify StructuredRequirements round-trips through JSON."""
-    from prd_decomposer.models import Requirement, StructuredRequirements
-
     req = Requirement(
         id="REQ-001",
         title="Test",
@@ -90,8 +90,6 @@ def test_structured_requirements_serialization():
 
 def test_story_model_valid():
     """Verify Story model accepts valid data."""
-    from prd_decomposer.models import Story
-
     story = Story(
         title="Implement login endpoint",
         description="Create POST /auth/login endpoint",
@@ -106,8 +104,6 @@ def test_story_model_valid():
 
 def test_story_invalid_size():
     """Verify Story rejects invalid size."""
-    from prd_decomposer.models import Story
-
     with pytest.raises(ValidationError):
         Story(
             title="Test",
@@ -121,8 +117,6 @@ def test_story_invalid_size():
 
 def test_epic_model_with_stories():
     """Verify Epic contains stories correctly."""
-    from prd_decomposer.models import Story, Epic
-
     story = Story(
         title="Story 1",
         description="Desc",
@@ -145,8 +139,6 @@ def test_epic_model_with_stories():
 
 def test_ticket_collection_model():
     """Verify TicketCollection contains epics and metadata."""
-    from prd_decomposer.models import Story, Epic, TicketCollection
-
     story = Story(
         title="Story",
         description="Desc",
@@ -173,8 +165,6 @@ def test_ticket_collection_model():
 
 def test_ticket_collection_serialization():
     """Verify TicketCollection round-trips through JSON."""
-    from prd_decomposer.models import Story, Epic, TicketCollection
-
     story = Story(
         title="Story",
         description="Desc",

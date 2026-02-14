@@ -1,14 +1,13 @@
 """Agent that consumes the PRD Decomposer MCP server."""
 
 import asyncio
-import sys
 from pathlib import Path
 
 from agents import Agent, Runner
 from agents.mcp import MCPServerStdio
 
 
-async def main():
+async def main() -> None:
     """Run the PRD Decomposer agent."""
 
     # Path to the MCP server
