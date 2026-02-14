@@ -11,6 +11,7 @@ from arcade_mcp_server import MCPApp
 from openai import APIConnectionError, APIError, OpenAI, RateLimitError
 from pydantic import ValidationError
 
+from prd_decomposer.config import Settings, get_settings
 from prd_decomposer.models import StructuredRequirements, TicketCollection
 from prd_decomposer.prompts import (
     ANALYZE_PRD_PROMPT,
@@ -88,9 +89,9 @@ def get_client() -> OpenAI:
 
 def _call_llm_with_retry(
     messages: list[dict],
-    max_retries: int = 3,
-    initial_delay: float = 1.0,
-    temperature: float = 0.2,
+    temperature: float,
+    client: OpenAI | None = None,
+    settings: Settings | None = None,
 ) -> tuple[dict, dict]:
     """Call LLM with exponential backoff retry.
 
@@ -100,13 +101,15 @@ def _call_llm_with_retry(
     Raises:
         LLMError: If all retries fail or response is invalid.
     """
-    client = get_client()
+    client = client or get_client()
+    settings = settings or get_settings()
+
     last_error = None
 
-    for attempt in range(max_retries):
+    for attempt in range(settings.max_retries):
         try:
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model=settings.openai_model,
                 messages=messages,
                 response_format={"type": "json_object"},
                 temperature=temperature,
@@ -136,14 +139,14 @@ def _call_llm_with_retry(
 
         except RateLimitError as e:
             last_error = e
-            if attempt < max_retries - 1:  # Don't sleep after final attempt
-                delay = initial_delay * (2**attempt)
+            if attempt < settings.max_retries - 1:
+                delay = settings.initial_retry_delay * (2**attempt)
                 time.sleep(delay)
 
         except APIConnectionError as e:
             last_error = e
-            if attempt < max_retries - 1:  # Don't sleep after final attempt
-                delay = initial_delay * (2**attempt)
+            if attempt < settings.max_retries - 1:
+                delay = settings.initial_retry_delay * (2**attempt)
                 time.sleep(delay)
 
         except APIError as e:
@@ -152,11 +155,11 @@ def _call_llm_with_retry(
             if status_code and 400 <= status_code < 500:
                 raise LLMError(f"OpenAI API error: {e}")
             last_error = e
-            if attempt < max_retries - 1:  # Don't sleep after final attempt
-                delay = initial_delay * (2**attempt)
+            if attempt < settings.max_retries - 1:
+                delay = settings.initial_retry_delay * (2**attempt)
                 time.sleep(delay)
 
-    raise LLMError(f"LLM call failed after {max_retries} retries: {last_error}")
+    raise LLMError(f"LLM call failed after {settings.max_retries} retries: {last_error}")
 
 
 @app.tool

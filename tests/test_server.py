@@ -9,6 +9,7 @@ import pytest
 from arcade_core.errors import FatalToolError
 from openai import APIConnectionError, APIError, RateLimitError
 
+from prd_decomposer.config import Settings
 from prd_decomposer.server import (
     LLMError,
     _call_llm_with_retry,
@@ -154,7 +155,9 @@ class TestLLMRetry:
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            data, usage = _call_llm_with_retry([{"role": "user", "content": "test"}])
+            data, usage = _call_llm_with_retry(
+                [{"role": "user", "content": "test"}], temperature=0.2
+            )
 
         assert data == {"result": "success"}
         assert usage["total_tokens"] == 150
@@ -168,7 +171,7 @@ class TestLLMRetry:
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with pytest.raises(LLMError, match="empty response"):
-                _call_llm_with_retry([{"role": "user", "content": "test"}])
+                _call_llm_with_retry([{"role": "user", "content": "test"}], temperature=0.2)
 
     def test_call_llm_with_retry_invalid_json(self):
         """Verify LLMError raised for invalid JSON."""
@@ -179,7 +182,7 @@ class TestLLMRetry:
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with pytest.raises(LLMError, match="invalid JSON"):
-                _call_llm_with_retry([{"role": "user", "content": "test"}])
+                _call_llm_with_retry([{"role": "user", "content": "test"}], temperature=0.2)
 
     def test_call_llm_with_retry_rate_limit_then_success(self):
         """Verify retry on RateLimitError eventually succeeds."""
@@ -198,10 +201,13 @@ class TestLLMRetry:
             ),
         ]
 
+        settings = Settings(initial_retry_delay=0.01)
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with patch("prd_decomposer.server.time.sleep"):  # Skip actual sleep
                 data, _usage = _call_llm_with_retry(
-                    [{"role": "user", "content": "test"}], initial_delay=0.01
+                    [{"role": "user", "content": "test"}],
+                    temperature=0.2,
+                    settings=settings,
                 )
 
         assert data == {"result": "success"}
@@ -221,10 +227,13 @@ class TestLLMRetry:
             ),
         ]
 
+        settings = Settings(initial_retry_delay=0.01)
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with patch("prd_decomposer.server.time.sleep"):
                 data, _usage = _call_llm_with_retry(
-                    [{"role": "user", "content": "test"}], initial_delay=0.01
+                    [{"role": "user", "content": "test"}],
+                    temperature=0.2,
+                    settings=settings,
                 )
 
         assert data == {"result": "success"}
@@ -238,7 +247,7 @@ class TestLLMRetry:
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with pytest.raises(LLMError, match="OpenAI API error"):
-                _call_llm_with_retry([{"role": "user", "content": "test"}])
+                _call_llm_with_retry([{"role": "user", "content": "test"}], temperature=0.2)
 
         # Should only be called once (no retries for 4xx)
         assert mock_client.chat.completions.create.call_count == 1
@@ -263,10 +272,13 @@ class TestLLMRetry:
             ),
         ]
 
+        settings = Settings(initial_retry_delay=0.01)
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with patch("prd_decomposer.server.time.sleep"):
                 data, _usage = _call_llm_with_retry(
-                    [{"role": "user", "content": "test"}], initial_delay=0.01
+                    [{"role": "user", "content": "test"}],
+                    temperature=0.2,
+                    settings=settings,
                 )
 
         assert data == {"result": "success"}
@@ -280,11 +292,14 @@ class TestLLMRetry:
         error.status_code = 500
         mock_client.chat.completions.create.side_effect = error
 
+        settings = Settings(max_retries=3, initial_retry_delay=0.01)
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with patch("prd_decomposer.server.time.sleep"):
                 with pytest.raises(LLMError, match="failed after 3 retries"):
                     _call_llm_with_retry(
-                        [{"role": "user", "content": "test"}], max_retries=3, initial_delay=0.01
+                        [{"role": "user", "content": "test"}],
+                        temperature=0.2,
+                        settings=settings,
                     )
 
         # Should be called 3 times (all retries exhausted)
@@ -297,11 +312,14 @@ class TestLLMRetry:
             message="Rate limit", response=MagicMock(status_code=429), body=None
         )
 
+        settings = Settings(max_retries=2, initial_retry_delay=0.01)
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with patch("prd_decomposer.server.time.sleep"):
                 with pytest.raises(LLMError, match="failed after 2 retries"):
                     _call_llm_with_retry(
-                        [{"role": "user", "content": "test"}], max_retries=2, initial_delay=0.01
+                        [{"role": "user", "content": "test"}],
+                        temperature=0.2,
+                        settings=settings,
                     )
 
 
