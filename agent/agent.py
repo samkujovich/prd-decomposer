@@ -66,18 +66,15 @@ Be conversational and helpful. Explain what you're doing at each step. If the PR
                 if not user_input:
                     continue
 
-                # Add user message to history
-                conversation_history.append({
-                    "role": "user",
-                    "content": user_input
-                })
+                # Build input: previous history + new user message
+                current_input = conversation_history + [{"role": "user", "content": user_input}]
 
                 # Run with full conversation history
-                result = await runner.run(agent, conversation_history)
+                result = await runner.run(agent, current_input)
                 print(f"\nAssistant: {result.final_output}\n")
 
-                # Add assistant response and any tool calls to history
-                conversation_history.extend(result.to_input_list())
+                # Update history with this turn's complete input/output
+                conversation_history = result.to_input_list()
 
             except KeyboardInterrupt:
                 print("\nGoodbye!")

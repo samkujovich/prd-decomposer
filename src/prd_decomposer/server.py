@@ -79,13 +79,19 @@ def analyze_prd(
 
 @app.tool
 def decompose_to_tickets(
-    requirements: Annotated[dict, "Structured requirements from analyze_prd"]
+    requirements: Annotated[dict, "Structured requirements from analyze_prd (pass the full output dict)"]
 ) -> dict:
     """Convert structured requirements into Jira-compatible epics and stories.
 
     Produces epics with child stories, acceptance criteria, t-shirt sizing (S/M/L),
     and labels. Output is ready for Jira import.
+
+    Pass the complete output from analyze_prd as the requirements parameter.
     """
+    # Handle case where requirements might be passed as string
+    if isinstance(requirements, str):
+        requirements = json.loads(requirements)
+
     # Validate input
     validated_input = StructuredRequirements(**requirements)
 
