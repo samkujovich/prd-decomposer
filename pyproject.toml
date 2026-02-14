@@ -1,0 +1,21 @@
+[project]
+name = "prd-decomposer"
+version = "1.0.0"
+description = "MCP server that analyzes PRDs and decomposes them into Jira-ready tickets"
+requires-python = ">=3.11"
+dependencies = [
+    "arcade-mcp",
+    "openai>=1.0.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "arcade-mcp[all]",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
