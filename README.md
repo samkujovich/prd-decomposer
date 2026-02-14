@@ -4,6 +4,14 @@ An MCP server that analyzes Product Requirements Documents (PRDs) and decomposes
 
 Built with [arcade-mcp](https://github.com/ArcadeAI/arcade-mcp).
 
+## The Problem
+
+Most engineering teams share the same broken workflow: a PM writes a PRD in Google Docs, an EM or tech lead manually translates it into Jira epics and stories, requirements change but tickets don't, and inevitably things get lost in the mix. Someone ends up spending hours playing human ETL—keeping docs, tickets, and stakeholder expectations in sync.
+
+## The Solution
+
+An MCP server that gives AI agents the ability to analyze a PRD, extract structured requirements, identify gaps and ambiguities, and decompose the whole thing into ready-to-create epics and stories—structured in a format that can feed directly into Jira. The agent handles the translation layer so humans don't have to.
+
 ## Architecture
 
 ```
@@ -84,6 +92,24 @@ Environment variables with `PRD_` prefix (via pydantic-settings):
 - `PRD_DECOMPOSE_TEMPERATURE` - Temperature for decomposition (default: `0.3`)
 - `PRD_MAX_RETRIES` - Max retry attempts, 1-10 (default: `3`)
 - `PRD_INITIAL_RETRY_DELAY` - Initial retry delay in seconds, 0-60 (default: `1.0`)
+
+## Key Decisions
+
+| Decision | Choice | Rationale | Alternative Considered |
+|----------|--------|-----------|------------------------|
+| **Language** | Python | Arcade's SDK, CLI, and eval framework are Python. Fighting the toolchain wastes time. | TypeScript (team uses it day-to-day, but Arcade tooling is Python-first) |
+| **Data Validation** | Pydantic models | Self-documenting, validates inputs/outputs, plays well with Arcade's type annotations | Plain dicts (faster to write but harder to validate) |
+| **LLM Provider** | OpenAI (gpt-4o) | Agent layer uses OpenAI Agents SDK; single provider keeps dependency surface clean | Anthropic Claude (would also work) |
+| **Agent Framework** | OpenAI Agents SDK | Production experience from building multi-agent systems; less framework wrangling | LangGraph (Arcade has examples, but "any framework" was allowed) |
+| **MCP Transport** | stdio | Arcade's default for local dev, simplest setup, what eval framework expects | HTTP (more production-realistic but adds complexity) |
+| **External APIs** | None (no Jira/Google OAuth) | Tools are the intelligence layer; output is Jira-compatible schema that composes with Arcade's Jira toolkit | Real Jira/Google OAuth (risky time sink) |
+| **Prompt Management** | Separate `prompts.py` | Keeps prompts testable, iterable, reviewable separately from tool logic | Inline prompts in tool functions |
+| **Configuration** | pydantic-settings with `PRD_` prefix | Runtime config without code changes; environment variables are 12-factor compliant | Hardcoded values or config files |
+| **Testability** | Dependency injection for LLM client | Tests can inject mock clients directly; no patching required | Global client with `@patch` decorators |
+| **Prompt Quality** | Few-shot examples in prompts | Improves LLM output consistency for ambiguity detection and story decomposition | Zero-shot prompts (less consistent) |
+| **MCP Tool Parameters** | JSON string for complex types | `dict` parameters weren't passed correctly by OpenAI agent; strings are more portable | `dict` type annotation (caused None values) |
+| **Retry Config** | Bounded validation (1-10 retries, 0-60s delay) | Prevents invalid env var values from causing runtime failures | Unbounded (accepts any value) |
+| **Path Security** | Symlink resolution + allowlist | Prevents path traversal attacks even through symlinked directories | Basic path checking (bypassable) |
 
 ## Setup
 
