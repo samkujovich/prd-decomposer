@@ -225,17 +225,22 @@ def analyze_prd(prd_text: Annotated[str, "Raw PRD markdown text to analyze"]) ->
     return _analyze_prd_impl(prd_text)
 
 
-@app.tool
-def decompose_to_tickets(
-    requirements: Annotated[dict, "Structured requirements from analyze_prd (required)"],
+def _decompose_to_tickets_impl(
+    requirements: dict,
+    client: OpenAI | None = None,
+    settings: Settings | None = None,
 ) -> dict:
-    """Convert structured requirements into Jira-compatible epics and stories.
+    """Internal implementation of decompose_to_tickets with DI support.
 
+    Converts structured requirements into Jira-compatible epics and stories.
     Produces epics with child stories, acceptance criteria, t-shirt sizing (S/M/L),
-    and labels. Output is ready for Jira import.
+    and labels.
 
-    Requires the requirements dict from analyze_prd to be passed explicitly.
+    Returns ticket collection with metadata including token usage.
     """
+    client = client or get_client()
+    settings = settings or get_settings()
+
     # Handle case where requirements might be passed as string
     if isinstance(requirements, str):
         try:
@@ -266,7 +271,9 @@ def decompose_to_tickets(
                     ),
                 }
             ],
-            temperature=0.3,
+            temperature=settings.decompose_temperature,
+            client=client,
+            settings=settings,
         )
     except LLMError as e:
         raise RuntimeError(f"Failed to decompose requirements: {e}")
@@ -275,7 +282,7 @@ def decompose_to_tickets(
     if "metadata" not in data:
         data["metadata"] = {}
     data["metadata"]["generated_at"] = datetime.now(UTC).isoformat()
-    data["metadata"]["model"] = "gpt-4o"
+    data["metadata"]["model"] = settings.openai_model
     data["metadata"]["prompt_version"] = PROMPT_VERSION
     data["metadata"]["requirement_count"] = len(validated_input.requirements)
     data["metadata"]["usage"] = usage
@@ -291,6 +298,20 @@ def decompose_to_tickets(
         raise RuntimeError(f"LLM returned invalid ticket structure: {e}")
 
     return validated.model_dump()
+
+
+@app.tool
+def decompose_to_tickets(
+    requirements: Annotated[dict, "Structured requirements from analyze_prd (required)"],
+) -> dict:
+    """Convert structured requirements into Jira-compatible epics and stories.
+
+    Produces epics with child stories, acceptance criteria, t-shirt sizing (S/M/L),
+    and labels. Output is ready for Jira import.
+
+    Requires the requirements dict from analyze_prd to be passed explicitly.
+    """
+    return _decompose_to_tickets_impl(requirements)
 
 
 if __name__ == "__main__":
