@@ -1,5 +1,6 @@
 """Configuration settings for PRD Decomposer."""
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,13 +10,21 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="PRD_")
 
     # LLM settings
-    openai_model: str = "gpt-4o"
-    analyze_temperature: float = 0.2
-    decompose_temperature: float = 0.3
+    openai_model: str = Field(default="gpt-4o", description="OpenAI model identifier")
+    analyze_temperature: float = Field(
+        default=0.2, description="Temperature for analyze_prd tool"
+    )
+    decompose_temperature: float = Field(
+        default=0.3, description="Temperature for decompose_to_tickets tool"
+    )
 
     # Retry settings
-    max_retries: int = 3
-    initial_retry_delay: float = 1.0
+    max_retries: int = Field(
+        default=3, description="Maximum retry attempts for LLM calls"
+    )
+    initial_retry_delay: float = Field(
+        default=1.0, description="Initial delay in seconds for retry backoff"
+    )
 
 
 # Singleton for convenience

@@ -1,5 +1,8 @@
 """Tests for configuration settings."""
 
+import pytest
+from pydantic import ValidationError
+
 from prd_decomposer.config import Settings, get_settings
 
 
@@ -33,6 +36,18 @@ class TestSettings:
         assert settings.openai_model == "gpt-4o-mini"
         assert settings.max_retries == 5
 
+    def test_settings_validates_temperature_from_env(self, monkeypatch):
+        """Verify Settings loads float temperatures from env vars."""
+        monkeypatch.setenv("PRD_ANALYZE_TEMPERATURE", "0.5")
+        settings = Settings()
+        assert settings.analyze_temperature == 0.5
+
+    def test_settings_invalid_int_from_env_raises(self, monkeypatch):
+        """Verify Settings raises for invalid integer env vars."""
+        monkeypatch.setenv("PRD_MAX_RETRIES", "not-a-number")
+        with pytest.raises(ValidationError):
+            Settings()
+
 
 class TestGetSettings:
     """Tests for get_settings function."""
@@ -46,7 +61,7 @@ class TestGetSettings:
         settings = get_settings()
         assert isinstance(settings, Settings)
 
-    def test_get_settings_caches_instance(self, monkeypatch):
+    def test_get_settings_caches_instance(self):
         """Verify get_settings returns same instance on repeated calls."""
         import prd_decomposer.config as config_module
         config_module._settings = None
