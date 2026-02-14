@@ -1,5 +1,8 @@
 """Prompt templates for PRD analysis and decomposition."""
 
+# Version for traceability - increment when prompts change
+PROMPT_VERSION = "1.0.0"
+
 ANALYZE_PRD_PROMPT = '''You are a senior technical product manager. Analyze the following PRD and extract structured requirements.
 
 For each requirement you identify:

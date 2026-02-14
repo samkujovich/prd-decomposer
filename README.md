@@ -115,8 +115,14 @@ Processes all sample PRDs and saves results to `outputs/`:
 ### Run the MCP Server Standalone
 
 ```bash
+# stdio mode (default, used by the agent)
 uv run python src/prd_decomposer/server.py
+
+# HTTP mode (for remote/network access - advanced use)
+# uv run python src/prd_decomposer/server.py http
 ```
+
+> **Note**: The agent uses stdio transport by default. HTTP mode is supported by arcade-mcp for remote access scenarios but is not covered by the test suite.
 
 ### Run Tests
 

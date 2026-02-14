@@ -1,6 +1,18 @@
 """Tests for prompt templates."""
 
-from prd_decomposer.prompts import ANALYZE_PRD_PROMPT, DECOMPOSE_TO_TICKETS_PROMPT
+from prd_decomposer.prompts import (
+    ANALYZE_PRD_PROMPT,
+    DECOMPOSE_TO_TICKETS_PROMPT,
+    PROMPT_VERSION,
+)
+
+
+def test_prompt_version_exists():
+    """Verify PROMPT_VERSION is defined and follows semver."""
+    assert PROMPT_VERSION
+    parts = PROMPT_VERSION.split(".")
+    assert len(parts) == 3, "PROMPT_VERSION should be semver (x.y.z)"
+    assert all(p.isdigit() for p in parts), "PROMPT_VERSION parts should be numeric"
 
 
 def test_analyze_prd_prompt_exists():

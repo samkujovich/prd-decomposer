@@ -1,31 +1,106 @@
 """Tests for MCP server tools with mocked LLM calls."""
 
 import json
+import os
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from arcade_core.errors import FatalToolError
+from openai import APIError, APIConnectionError, RateLimitError
 from pydantic import ValidationError
 
-from prd_decomposer.server import analyze_prd, decompose_to_tickets, get_client, read_file
+from prd_decomposer.server import (
+    analyze_prd,
+    decompose_to_tickets,
+    get_client,
+    read_file,
+    _is_path_allowed,
+    ALLOWED_DIRECTORIES,
+    LLMError,
+    _call_llm_with_retry,
+)
 
 
 class TestReadFile:
     """Tests for the read_file tool."""
 
-    def test_read_file_returns_content(self, tmp_path):
+    def test_read_file_returns_content(self, tmp_path, monkeypatch):
         """Verify read_file returns file contents."""
-        test_file = tmp_path / "test.md"
-        test_file.write_text("# Test PRD\n\nThis is a test.")
+        # Add tmp_path to allowed directories for this test
+        import prd_decomposer.server as server_module
+        original_allowed = server_module.ALLOWED_DIRECTORIES.copy()
+        server_module.ALLOWED_DIRECTORIES.append(tmp_path)
 
-        result = read_file(str(test_file))
+        try:
+            test_file = tmp_path / "test.md"
+            test_file.write_text("# Test PRD\n\nThis is a test.")
 
-        assert result == "# Test PRD\n\nThis is a test."
+            result = read_file(str(test_file))
+
+            assert result == "# Test PRD\n\nThis is a test."
+        finally:
+            server_module.ALLOWED_DIRECTORIES = original_allowed
 
     def test_read_file_nonexistent_raises_error(self):
-        """Verify read_file raises FatalToolError for missing files."""
+        """Verify read_file raises FatalToolError for missing files within allowed dirs."""
+        # Use a path within cwd that doesn't exist
         with pytest.raises(FatalToolError):
-            read_file("/nonexistent/path/to/file.md")
+            read_file("nonexistent_file_in_cwd.md")
+
+    def test_read_file_path_traversal_blocked(self):
+        """Verify read_file blocks path traversal attempts."""
+        with pytest.raises(FatalToolError):
+            read_file("/etc/passwd")
+
+    def test_read_file_parent_traversal_blocked(self):
+        """Verify read_file blocks parent directory traversal."""
+        with pytest.raises(FatalToolError):
+            read_file("../../../etc/passwd")
+
+    def test_read_file_home_directory_blocked(self):
+        """Verify read_file blocks home directory access."""
+        with pytest.raises(FatalToolError):
+            read_file(os.path.expanduser("~/.ssh/id_rsa"))
+
+
+class TestPathValidation:
+    """Tests for path validation security."""
+
+    def test_is_path_allowed_cwd(self):
+        """Verify paths within cwd are allowed."""
+        cwd = Path.cwd()
+        assert _is_path_allowed(cwd / "somefile.md")
+
+    def test_is_path_allowed_rejects_outside(self):
+        """Verify paths outside allowed directories are rejected."""
+        assert not _is_path_allowed(Path("/etc/passwd"))
+        assert not _is_path_allowed(Path("/tmp/secret.txt"))
+
+    def test_is_path_allowed_handles_invalid_path(self):
+        """Verify _is_path_allowed handles paths that can't be resolved."""
+        # Create a mock path that raises OSError on resolve
+        with patch.object(Path, "resolve", side_effect=OSError("Permission denied")):
+            # Should return False, not raise
+            result = _is_path_allowed(Path("/some/path"))
+            assert result is False
+
+
+class TestReadFileEdgeCases:
+    """Additional edge case tests for read_file."""
+
+    def test_read_file_directory_raises_error(self, tmp_path, monkeypatch):
+        """Verify read_file raises error when path is a directory."""
+        import prd_decomposer.server as server_module
+        original_allowed = server_module.ALLOWED_DIRECTORIES.copy()
+        server_module.ALLOWED_DIRECTORIES.append(tmp_path)
+
+        try:
+            # tmp_path is a directory, not a file
+            with pytest.raises(FatalToolError):
+                read_file(str(tmp_path))
+        finally:
+            server_module.ALLOWED_DIRECTORIES = original_allowed
 
 
 class TestGetClient:
@@ -62,11 +137,192 @@ class TestGetClient:
             mock_openai.assert_called_once()
 
 
+class TestLLMRetry:
+    """Tests for LLM retry logic."""
+
+    def test_call_llm_with_retry_success(self):
+        """Verify successful LLM call returns data and usage."""
+        mock_response = {"result": "success"}
+        mock_usage = MagicMock(
+            prompt_tokens=100,
+            completion_tokens=50,
+            total_tokens=150
+        )
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
+            usage=mock_usage
+        )
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            data, usage = _call_llm_with_retry([{"role": "user", "content": "test"}])
+
+        assert data == {"result": "success"}
+        assert usage["total_tokens"] == 150
+
+    def test_call_llm_with_retry_empty_response(self):
+        """Verify LLMError raised for empty response."""
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content=""))]
+        )
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            with pytest.raises(LLMError, match="empty response"):
+                _call_llm_with_retry([{"role": "user", "content": "test"}])
+
+    def test_call_llm_with_retry_invalid_json(self):
+        """Verify LLMError raised for invalid JSON."""
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content="not valid json"))]
+        )
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            with pytest.raises(LLMError, match="invalid JSON"):
+                _call_llm_with_retry([{"role": "user", "content": "test"}])
+
+    def test_call_llm_with_retry_rate_limit_then_success(self):
+        """Verify retry on RateLimitError eventually succeeds."""
+        mock_response = {"result": "success"}
+        mock_usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+
+        mock_client = MagicMock()
+        # First call raises RateLimitError, second succeeds
+        mock_client.chat.completions.create.side_effect = [
+            RateLimitError(
+                message="Rate limit exceeded",
+                response=MagicMock(status_code=429),
+                body=None
+            ),
+            MagicMock(
+                choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
+                usage=mock_usage
+            ),
+        ]
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            with patch("prd_decomposer.server.time.sleep"):  # Skip actual sleep
+                data, usage = _call_llm_with_retry(
+                    [{"role": "user", "content": "test"}],
+                    initial_delay=0.01
+                )
+
+        assert data == {"result": "success"}
+        assert mock_client.chat.completions.create.call_count == 2
+
+    def test_call_llm_with_retry_connection_error_then_success(self):
+        """Verify retry on APIConnectionError eventually succeeds."""
+        mock_response = {"result": "success"}
+        mock_usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = [
+            APIConnectionError(request=MagicMock()),
+            MagicMock(
+                choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
+                usage=mock_usage
+            ),
+        ]
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            with patch("prd_decomposer.server.time.sleep"):
+                data, usage = _call_llm_with_retry(
+                    [{"role": "user", "content": "test"}],
+                    initial_delay=0.01
+                )
+
+        assert data == {"result": "success"}
+
+    def test_call_llm_with_retry_api_error_4xx_no_retry(self):
+        """Verify 4xx APIError raises immediately without retry."""
+        mock_client = MagicMock()
+        error = APIError(message="Bad request", request=MagicMock(), body=None)
+        error.status_code = 400
+        mock_client.chat.completions.create.side_effect = error
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            with pytest.raises(LLMError, match="OpenAI API error"):
+                _call_llm_with_retry([{"role": "user", "content": "test"}])
+
+        # Should only be called once (no retries for 4xx)
+        assert mock_client.chat.completions.create.call_count == 1
+
+    def test_call_llm_with_retry_api_error_no_status_code(self):
+        """Verify APIError without status_code attribute retries."""
+        mock_response = {"result": "success"}
+        mock_usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+
+        # Create error without status_code attribute
+        error = APIError(message="Unknown error", request=MagicMock(), body=None)
+        # Explicitly remove status_code if it exists
+        if hasattr(error, "status_code"):
+            delattr(error, "status_code")
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = [
+            error,
+            MagicMock(
+                choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
+                usage=mock_usage
+            ),
+        ]
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            with patch("prd_decomposer.server.time.sleep"):
+                data, usage = _call_llm_with_retry(
+                    [{"role": "user", "content": "test"}],
+                    initial_delay=0.01
+                )
+
+        assert data == {"result": "success"}
+        # Should retry (2 calls total)
+        assert mock_client.chat.completions.create.call_count == 2
+
+    def test_call_llm_with_retry_api_error_5xx_retries(self):
+        """Verify 5xx APIError retries then fails."""
+        mock_client = MagicMock()
+        error = APIError(message="Server error", request=MagicMock(), body=None)
+        error.status_code = 500
+        mock_client.chat.completions.create.side_effect = error
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            with patch("prd_decomposer.server.time.sleep"):
+                with pytest.raises(LLMError, match="failed after 3 retries"):
+                    _call_llm_with_retry(
+                        [{"role": "user", "content": "test"}],
+                        max_retries=3,
+                        initial_delay=0.01
+                    )
+
+        # Should be called 3 times (all retries exhausted)
+        assert mock_client.chat.completions.create.call_count == 3
+
+    def test_call_llm_with_retry_all_retries_exhausted(self):
+        """Verify LLMError raised after all retries exhausted."""
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = RateLimitError(
+            message="Rate limit",
+            response=MagicMock(status_code=429),
+            body=None
+        )
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            with patch("prd_decomposer.server.time.sleep"):
+                with pytest.raises(LLMError, match="failed after 2 retries"):
+                    _call_llm_with_retry(
+                        [{"role": "user", "content": "test"}],
+                        max_retries=2,
+                        initial_delay=0.01
+                    )
+
+
 class TestAnalyzePrd:
     """Tests for the analyze_prd tool."""
 
     def test_analyze_prd_returns_structured_requirements(self):
-        """Verify analyze_prd returns validated StructuredRequirements."""
+        """Verify analyze_prd returns validated StructuredRequirements with metadata."""
         mock_response = {
             "requirements": [
                 {
@@ -83,9 +339,16 @@ class TestAnalyzePrd:
             "source_hash": "abc12345"
         }
 
+        mock_usage = MagicMock(
+            prompt_tokens=100,
+            completion_tokens=50,
+            total_tokens=150
+        )
+
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
-            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))]
+            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
+            usage=mock_usage
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -97,6 +360,10 @@ class TestAnalyzePrd:
         assert result["summary"] == "Authentication system PRD"
         # source_hash is overwritten by the function
         assert len(result["source_hash"]) == 8
+        # Verify metadata is included
+        assert "_metadata" in result
+        assert "usage" in result["_metadata"]
+        assert "prompt_version" in result["_metadata"]
 
     def test_analyze_prd_generates_source_hash(self):
         """Verify analyze_prd generates a hash from the input text."""
@@ -106,9 +373,12 @@ class TestAnalyzePrd:
             "source_hash": "ignored"
         }
 
+        mock_usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
-            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))]
+            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
+            usage=mock_usage
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -136,9 +406,12 @@ class TestAnalyzePrd:
             "source_hash": "12345678"
         }
 
+        mock_usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
-            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))]
+            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
+            usage=mock_usage
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -164,14 +437,31 @@ class TestAnalyzePrd:
             "source_hash": "12345678"
         }
 
+        mock_usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
-            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))]
+            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
+            usage=mock_usage
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with pytest.raises(FatalToolError):
                 analyze_prd("Test PRD")
+
+    def test_analyze_prd_llm_error_propagates(self):
+        """Verify analyze_prd raises FatalToolError when LLM call fails."""
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = RateLimitError(
+            message="Rate limit",
+            response=MagicMock(status_code=429),
+            body=None
+        )
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            with patch("prd_decomposer.server.time.sleep"):
+                with pytest.raises(FatalToolError, match="Failed to analyze PRD"):
+                    analyze_prd("Test PRD")
 
 
 class TestDecomposeToTickets:
@@ -215,9 +505,12 @@ class TestDecomposeToTickets:
             ]
         }
 
+        mock_usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
+
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
-            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))]
+            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
+            usage=mock_usage
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -230,7 +523,7 @@ class TestDecomposeToTickets:
         assert result["epics"][0]["stories"][0]["size"] == "M"
 
     def test_decompose_to_tickets_adds_metadata(self):
-        """Verify decompose_to_tickets adds generation metadata."""
+        """Verify decompose_to_tickets adds generation metadata with usage."""
         input_requirements = {
             "requirements": [
                 {
@@ -258,9 +551,12 @@ class TestDecomposeToTickets:
             ]
         }
 
+        mock_usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
+
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
-            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))]
+            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
+            usage=mock_usage
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -269,8 +565,11 @@ class TestDecomposeToTickets:
         assert "metadata" in result
         assert "generated_at" in result["metadata"]
         assert result["metadata"]["model"] == "gpt-4o"
+        assert result["metadata"]["prompt_version"] is not None
         assert result["metadata"]["requirement_count"] == 1
         assert result["metadata"]["story_count"] == 0
+        assert "usage" in result["metadata"]
+        assert result["metadata"]["usage"]["total_tokens"] == 150
 
     def test_decompose_to_tickets_counts_stories(self):
         """Verify decompose_to_tickets correctly counts total stories."""
@@ -315,9 +614,12 @@ class TestDecomposeToTickets:
             ]
         }
 
+        mock_usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
+
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
-            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))]
+            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
+            usage=mock_usage
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -332,6 +634,55 @@ class TestDecomposeToTickets:
 
         with pytest.raises(FatalToolError):
             decompose_to_tickets(invalid_input)
+
+    def test_decompose_to_tickets_empty_requirements_raises(self):
+        """Verify decompose_to_tickets raises for empty requirements."""
+        with pytest.raises(FatalToolError):
+            decompose_to_tickets({})
+
+    def test_decompose_to_tickets_strips_internal_metadata(self):
+        """Verify decompose_to_tickets handles _metadata from analyze_prd."""
+        input_requirements = {
+            "requirements": [
+                {
+                    "id": "REQ-001",
+                    "title": "Test",
+                    "description": "Test",
+                    "acceptance_criteria": [],
+                    "dependencies": [],
+                    "ambiguity_flags": [],
+                    "priority": "low"
+                }
+            ],
+            "summary": "Test",
+            "source_hash": "12345678",
+            "_metadata": {"prompt_version": "1.0.0", "usage": {}}  # Should be stripped
+        }
+
+        mock_response = {
+            "epics": [
+                {
+                    "title": "Epic",
+                    "description": "Desc",
+                    "stories": [],
+                    "labels": []
+                }
+            ]
+        }
+
+        mock_usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
+            usage=mock_usage
+        )
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            result = decompose_to_tickets(input_requirements)
+
+        # Should succeed - _metadata is stripped before validation
+        assert "epics" in result
 
     def test_decompose_to_tickets_validates_llm_response(self):
         """Verify decompose_to_tickets raises FatalToolError for invalid LLM response."""
@@ -372,11 +723,168 @@ class TestDecomposeToTickets:
             ]
         }
 
+        mock_usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
+
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
-            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))]
+            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
+            usage=mock_usage
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with pytest.raises(FatalToolError):
                 decompose_to_tickets(input_requirements)
+
+    def test_decompose_to_tickets_string_requirements(self):
+        """Verify decompose_to_tickets handles string (JSON) requirements."""
+        input_requirements = {
+            "requirements": [
+                {
+                    "id": "REQ-001",
+                    "title": "Test",
+                    "description": "Test",
+                    "acceptance_criteria": [],
+                    "dependencies": [],
+                    "ambiguity_flags": [],
+                    "priority": "low"
+                }
+            ],
+            "summary": "Test",
+            "source_hash": "12345678"
+        }
+
+        mock_response = {
+            "epics": [
+                {
+                    "title": "Epic",
+                    "description": "Desc",
+                    "stories": [],
+                    "labels": []
+                }
+            ]
+        }
+
+        mock_usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
+            usage=mock_usage
+        )
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            # Pass as JSON string instead of dict
+            result = decompose_to_tickets(json.dumps(input_requirements))
+
+        assert "epics" in result
+
+    def test_decompose_to_tickets_invalid_json_string(self):
+        """Verify decompose_to_tickets raises for invalid JSON string."""
+        with pytest.raises(FatalToolError, match="Invalid JSON"):
+            decompose_to_tickets("not valid json {")
+
+    def test_decompose_to_tickets_llm_error_propagates(self):
+        """Verify decompose_to_tickets raises FatalToolError when LLM call fails."""
+        input_requirements = {
+            "requirements": [
+                {
+                    "id": "REQ-001",
+                    "title": "Test",
+                    "description": "Test",
+                    "acceptance_criteria": [],
+                    "dependencies": [],
+                    "ambiguity_flags": [],
+                    "priority": "high"
+                }
+            ],
+            "summary": "Test",
+            "source_hash": "12345678"
+        }
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = RateLimitError(
+            message="Rate limit",
+            response=MagicMock(status_code=429),
+            body=None
+        )
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            with patch("prd_decomposer.server.time.sleep"):
+                with pytest.raises(FatalToolError, match="Failed to decompose"):
+                    decompose_to_tickets(input_requirements)
+
+
+class TestIntegrationPipeline:
+    """Integration tests for the full analyze -> decompose pipeline."""
+
+    def test_full_pipeline_mocked(self):
+        """Test the full pipeline with mocked LLM calls."""
+        # Mock analyze_prd response
+        analyze_response = {
+            "requirements": [
+                {
+                    "id": "REQ-001",
+                    "title": "User authentication",
+                    "description": "Users must log in securely",
+                    "acceptance_criteria": ["Login form exists", "JWT issued"],
+                    "dependencies": [],
+                    "ambiguity_flags": [],
+                    "priority": "high"
+                }
+            ],
+            "summary": "Auth system",
+            "source_hash": "abc12345"
+        }
+
+        # Mock decompose_to_tickets response
+        decompose_response = {
+            "epics": [
+                {
+                    "title": "Authentication",
+                    "description": "User auth features",
+                    "stories": [
+                        {
+                            "title": "Implement login",
+                            "description": "Create login endpoint",
+                            "acceptance_criteria": ["Returns JWT"],
+                            "size": "M",
+                            "labels": ["backend"],
+                            "requirement_ids": ["REQ-001"]
+                        }
+                    ],
+                    "labels": ["auth"]
+                }
+            ]
+        }
+
+        mock_usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
+
+        mock_client = MagicMock()
+        # First call returns analyze response, second returns decompose response
+        mock_client.chat.completions.create.side_effect = [
+            MagicMock(
+                choices=[MagicMock(message=MagicMock(content=json.dumps(analyze_response)))],
+                usage=mock_usage
+            ),
+            MagicMock(
+                choices=[MagicMock(message=MagicMock(content=json.dumps(decompose_response)))],
+                usage=mock_usage
+            ),
+        ]
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            # Step 1: Analyze
+            requirements = analyze_prd("# Sample PRD\n\nUser auth required.")
+
+            assert "requirements" in requirements
+            assert len(requirements["requirements"]) == 1
+            assert "_metadata" in requirements
+
+            # Step 2: Decompose (passing requirements explicitly)
+            tickets = decompose_to_tickets(requirements)
+
+            assert "epics" in tickets
+            assert len(tickets["epics"]) == 1
+            assert tickets["epics"][0]["stories"][0]["requirement_ids"] == ["REQ-001"]
+            assert "metadata" in tickets
+            assert tickets["metadata"]["requirement_count"] == 1

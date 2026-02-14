@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Batch process all sample PRDs and save results."""
+"""Batch process all sample PRDs and save results.
+
+Run with: uv run python scripts/run_all_prds.py
+"""
 
 import json
 import sys
 from pathlib import Path
-
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from prd_decomposer.server import analyze_prd, decompose_to_tickets, read_file
 
