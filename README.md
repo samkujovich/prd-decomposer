@@ -8,27 +8,35 @@ Built with [arcade-mcp](https://github.com/ArcadeAI/arcade-mcp) for the Arcade.d
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                         Agent                                │
-│                   (OpenAI Agents SDK)                        │
-│                                                              │
-│  1. Receives PRD from user                                   │
-│  2. Calls analyze_prd → surfaces ambiguities                 │
-│  3. Calls decompose_to_tickets → returns Jira-ready output   │
+│                         Agent                               │
+│                   (OpenAI Agents SDK)                       │
+│                                                             │
+│  1. Receives PRD from user (file path or pasted text)       │
+│  2. Calls read_file → gets PRD content                      │
+│  3. Calls analyze_prd → surfaces ambiguities                │
+│  4. Calls decompose_to_tickets → returns Jira-ready output  │
 └─────────────────────┬───────────────────────────────────────┘
                       │ stdio
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    MCP Server                                │
-│                 (prd_decomposer)                             │
-│                                                              │
-│  ┌─────────────────┐    ┌──────────────────────┐            │
-│  │   analyze_prd   │    │  decompose_to_tickets │            │
-│  │   (GPT-4o)      │    │      (GPT-4o)         │            │
-│  └─────────────────┘    └──────────────────────┘            │
+│                    MCP Server                               │
+│                 (prd_decomposer)                            │
+│                                                             │
+│  ┌───────────┐  ┌─────────────┐  ┌──────────────────────┐  │
+│  │ read_file │  │ analyze_prd │  │ decompose_to_tickets │  │
+│  │           │  │  (GPT-4o)   │  │      (GPT-4o)        │  │
+│  └───────────┘  └─────────────┘  └──────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ## Tools
+
+### `read_file`
+
+Reads a file from the filesystem.
+
+**Input:** File path (relative or absolute)
+**Output:** File contents as string
 
 ### `analyze_prd`
 
@@ -39,14 +47,14 @@ Analyzes raw PRD text and extracts structured requirements.
 - Unique IDs (REQ-001, REQ-002, etc.)
 - Acceptance criteria
 - Dependencies between requirements
-- Ambiguity flags (missing criteria, vague quantifiers)
+- Ambiguity flags (missing criteria, vague quantifiers like "fast", "scalable", "user-friendly")
 - Priority levels (high/medium/low)
 
 ### `decompose_to_tickets`
 
 Converts structured requirements into Jira-compatible tickets.
 
-**Input:** Structured requirements from `analyze_prd`
+**Input:** Structured requirements from `analyze_prd` (or uses cached result if not provided)
 **Output:** Epics and stories with:
 - Clear titles and descriptions
 - Acceptance criteria
@@ -66,58 +74,99 @@ Converts structured requirements into Jira-compatible tickets.
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/prd-decomposer.git
+git clone https://github.com/samkujovich/prd-decomposer.git
 cd prd-decomposer
 
 # Install dependencies
 uv sync --all-extras
 
-# Set up environment
-cp src/prd_decomposer/.env.example .env
-# Edit .env and add your OPENAI_API_KEY
+# Set OpenAI API key
+export OPENAI_API_KEY="your-key-here"
 ```
 
 ## Usage
 
-### Run the MCP Server
-
-```bash
-uv run python src/prd_decomposer/server.py
-```
-
-### Run the Agent
+### Interactive Agent
 
 ```bash
 uv run python agent/agent.py
 ```
 
+Then:
+```
+You: analyze samples/sample_prd_01_rate_limiting.md
+# ... shows requirements and ambiguity flags ...
+
+You: jira tickets
+# ... generates epics and stories ...
+```
+
+### Batch Processing (All 10 Sample PRDs)
+
+```bash
+uv run python scripts/run_all_prds.py
+```
+
+Processes all sample PRDs and saves results to `outputs/`:
+- `*_requirements.json` - extracted requirements
+- `*_tickets.json` - Jira epics/stories
+- `summary.json` - aggregated metrics
+
+### Run the MCP Server Standalone
+
+```bash
+uv run python src/prd_decomposer/server.py
+```
+
 ### Run Tests
 
 ```bash
-# Unit tests
+# Unit tests (27 tests, 94% coverage)
 uv run pytest tests/ -v
 
-# Arcade evals (requires OPENAI_API_KEY)
-uv run arcade evals evals/eval_prd_tools.py
+# With coverage report
+uv run pytest tests/ --cov=prd_decomposer --cov-report=term-missing
 ```
+
+## Sample PRDs
+
+10 diverse PRDs for testing different domains and ambiguity patterns:
+
+| # | PRD | Ambiguity Pattern |
+|---|-----|-------------------|
+| 1 | API Rate Limiting | Vague: "scalable", "user-friendly" |
+| 2 | User Onboarding | Clear requirements |
+| 3 | E-commerce Checkout | Vague: "seamless", "quick" |
+| 4 | Notification System | Clear requirements |
+| 5 | Analytics Dashboard | Vague: "acceptable" metrics |
+| 6 | File Upload Service | Clear technical specs |
+| 7 | Search Feature | Vague: "relevant", "fast" |
+| 8 | Subscription Billing | Clear business rules |
+| 9 | Webhook System | Clear technical spec |
+| 10 | Mobile Push | Vague: "significant", "good" |
 
 ## Project Structure
 
 ```
 prd-decomposer/
 ├── src/prd_decomposer/
-│   ├── server.py      # MCP server + tool definitions
-│   ├── models.py      # Pydantic models
-│   └── prompts.py     # LLM prompt templates
+│   ├── __init__.py       # Public exports
+│   ├── server.py         # MCP server + tool definitions
+│   ├── models.py         # Pydantic models
+│   └── prompts.py        # LLM prompt templates
 ├── agent/
-│   └── agent.py       # OpenAI Agents SDK consumer
-├── evals/
-│   └── eval_prd_tools.py  # Arcade eval suite
+│   └── agent.py          # OpenAI Agents SDK consumer
+├── scripts/
+│   └── run_all_prds.py   # Batch processing script
 ├── tests/
-│   └── test_tools.py  # Unit tests
+│   ├── test_tools.py     # Model tests
+│   ├── test_server.py    # Server/tool tests (mocked LLM)
+│   └── test_prompts.py   # Prompt template tests
 ├── samples/
-│   └── sample_prd.md  # Example PRD
-└── AI_USAGE.md        # AI attribution
+│   └── sample_prd_*.md   # 10 sample PRDs
+├── outputs/              # Generated JSON outputs (gitignored)
+├── CLAUDE.md             # Project coding standards
+└── AI_USAGE.md           # AI attribution
 ```
 
 ## License
