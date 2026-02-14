@@ -14,28 +14,7 @@ An MCP server that gives AI agents the ability to analyze a PRD, extract structu
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         Agent                               │
-│                   (OpenAI Agents SDK)                       │
-│                                                             │
-│  1. Receives PRD from user (file path or pasted text)       │
-│  2. Calls read_file → gets PRD content                      │
-│  3. Calls analyze_prd → surfaces ambiguities                │
-│  4. Calls decompose_to_tickets → returns Jira-ready output  │
-└─────────────────────┬───────────────────────────────────────┘
-                      │ stdio
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    MCP Server                               │
-│                 (prd_decomposer)                            │
-│                                                             │
-│  ┌───────────┐  ┌─────────────┐  ┌──────────────────────┐  │
-│  │ read_file │  │ analyze_prd │  │ decompose_to_tickets │  │
-│  │           │  │  (GPT-4o)   │  │      (GPT-4o)        │  │
-│  └───────────┘  └─────────────┘  └──────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-```
+![Architecture Diagram](docs/diagrams/architecture.svg)
 
 ## Tools
 

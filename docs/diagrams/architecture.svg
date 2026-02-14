@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 650" width="800" height="650">
+  <style>
+    .title { font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; }
+    .label { font-family: Arial, sans-serif; font-size: 14px; }
+    .small { font-family: Arial, sans-serif; font-size: 12px; }
+  </style>
+
+  <!-- Background -->
+  <rect width="800" height="650" fill="#ffffff"/>
+
+  <!-- Arrow marker definitions -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#1e1e1e"/>
+    </marker>
+  </defs>
+
+  <!-- Agent Box -->
+  <rect x="280" y="40" width="240" height="100" rx="8" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+  <text x="400" y="75" text-anchor="middle" class="title" fill="#1e1e1e">Agent</text>
+  <text x="400" y="100" text-anchor="middle" class="label" fill="#1e1e1e">(OpenAI Agents SDK)</text>
+
+  <!-- stdio arrow -->
+  <line x1="400" y1="140" x2="400" y2="200" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <text x="420" y="175" class="small" fill="#495057">stdio</text>
+
+  <!-- MCP Server Container -->
+  <rect x="160" y="200" width="480" height="280" rx="8" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+  <text x="400" y="225" text-anchor="middle" class="title" fill="#1e1e1e">MCP Server (prd_decomposer)</text>
+
+  <!-- read_file tool -->
+  <rect x="180" y="250" width="120" height="60" rx="6" fill="#dee2e6" stroke="#495057" stroke-width="2"/>
+  <text x="240" y="285" text-anchor="middle" class="label" fill="#1e1e1e">read_file</text>
+
+  <!-- analyze_prd tool -->
+  <rect x="340" y="250" width="120" height="60" rx="6" fill="#d0bfff" stroke="#7048e8" stroke-width="2"/>
+  <text x="400" y="285" text-anchor="middle" class="label" fill="#1e1e1e">analyze_prd</text>
+
+  <!-- decompose_to_tickets tool -->
+  <rect x="500" y="250" width="120" height="60" rx="6" fill="#d0bfff" stroke="#7048e8" stroke-width="2"/>
+  <text x="560" y="278" text-anchor="middle" class="label" fill="#1e1e1e">decompose_</text>
+  <text x="560" y="295" text-anchor="middle" class="label" fill="#1e1e1e">to_tickets</text>
+
+  <!-- Arrows to GPT-4o -->
+  <line x1="400" y1="310" x2="400" y2="360" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="560" y1="310" x2="560" y2="360" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- GPT-4o boxes -->
+  <rect x="320" y="360" width="160" height="50" rx="6" fill="#ffec99" stroke="#f08c00" stroke-width="2"/>
+  <text x="400" y="390" text-anchor="middle" class="title" fill="#1e1e1e">GPT-4o</text>
+
+  <rect x="480" y="360" width="160" height="50" rx="6" fill="#ffec99" stroke="#f08c00" stroke-width="2"/>
+  <text x="560" y="390" text-anchor="middle" class="title" fill="#1e1e1e">GPT-4o</text>
+
+  <!-- Arrow to Filesystem -->
+  <line x1="240" y1="310" x2="240" y2="410" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Filesystem box -->
+  <rect x="180" y="410" width="120" height="50" rx="6" fill="#dee2e6" stroke="#495057" stroke-width="2"/>
+  <text x="240" y="440" text-anchor="middle" class="label" fill="#1e1e1e">Filesystem</text>
+
+  <!-- Data flow boxes at bottom -->
+  <rect x="60" y="520" width="180" height="80" rx="6" fill="#ffc9c9" stroke="#e03131" stroke-width="2"/>
+  <text x="150" y="550" text-anchor="middle" class="label" fill="#1e1e1e">PRD Input</text>
+  <text x="150" y="570" text-anchor="middle" class="small" fill="#1e1e1e">(markdown file)</text>
+
+  <rect x="310" y="520" width="180" height="80" rx="6" fill="#a5d8ff" stroke="#1971c2" stroke-width="2"/>
+  <text x="400" y="550" text-anchor="middle" class="label" fill="#1e1e1e">StructuredRequirements</text>
+  <text x="400" y="570" text-anchor="middle" class="small" fill="#1e1e1e">(Pydantic model)</text>
+
+  <rect x="560" y="520" width="180" height="80" rx="6" fill="#b2f2bb" stroke="#2f9e44" stroke-width="2"/>
+  <text x="650" y="550" text-anchor="middle" class="label" fill="#1e1e1e">TicketCollection</text>
+  <text x="650" y="570" text-anchor="middle" class="small" fill="#1e1e1e">(Epics + Stories)</text>
+
+  <!-- Data flow arrows -->
+  <line x1="240" y1="560" x2="310" y2="560" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="490" y1="560" x2="560" y2="560" stroke="#1e1e1e" stroke-width="2" marker-end="url(#arrowhead)"/>
+</svg>
