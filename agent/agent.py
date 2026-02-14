@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 
 from agents import Agent, Runner
+from agents.items import TResponseInputItem
 from agents.mcp import MCPServerStdio, MCPServerStdioParams
 
 
@@ -46,8 +47,10 @@ Be conversational and helpful. Explain what you're doing at each step. If the PR
             model="gpt-4o",
         )
 
-        # Run interactive loop
+        # Run interactive loop with conversation history
         runner = Runner()
+        conversation_history: list[TResponseInputItem] = []
+
         print("PRD Decomposer Agent")
         print("=" * 40)
         print("I help convert PRDs into Jira tickets.")
@@ -63,8 +66,18 @@ Be conversational and helpful. Explain what you're doing at each step. If the PR
                 if not user_input:
                     continue
 
-                result = await runner.run(agent, user_input)
+                # Add user message to history
+                conversation_history.append({
+                    "role": "user",
+                    "content": user_input
+                })
+
+                # Run with full conversation history
+                result = await runner.run(agent, conversation_history)
                 print(f"\nAssistant: {result.final_output}\n")
+
+                # Add assistant response and any tool calls to history
+                conversation_history.extend(result.to_input_list())
 
             except KeyboardInterrupt:
                 print("\nGoodbye!")
