@@ -162,15 +162,21 @@ def _call_llm_with_retry(
     raise LLMError(f"LLM call failed after {settings.max_retries} retries: {last_error}")
 
 
-@app.tool
-def analyze_prd(prd_text: Annotated[str, "Raw PRD markdown text to analyze"]) -> dict:
-    """Analyze a PRD and extract structured requirements.
+def _analyze_prd_impl(
+    prd_text: str,
+    client: OpenAI | None = None,
+    settings: Settings | None = None,
+) -> dict:
+    """Internal implementation of analyze_prd with DI support.
 
     Extracts requirements with IDs, acceptance criteria, dependencies,
     and flags ambiguous requirements (missing criteria or vague quantifiers).
 
     Returns structured requirements with metadata including token usage.
     """
+    client = client or get_client()
+    settings = settings or get_settings()
+
     # Generate source hash for traceability
     source_hash = hashlib.sha256(prd_text.encode()).hexdigest()[:8]
 
@@ -178,7 +184,9 @@ def analyze_prd(prd_text: Annotated[str, "Raw PRD markdown text to analyze"]) ->
     try:
         data, usage = _call_llm_with_retry(
             messages=[{"role": "user", "content": ANALYZE_PRD_PROMPT.format(prd_text=prd_text)}],
-            temperature=0.2,
+            temperature=settings.analyze_temperature,
+            client=client,
+            settings=settings,
         )
     except LLMError as e:
         raise RuntimeError(f"Failed to analyze PRD: {e}")
@@ -197,12 +205,24 @@ def analyze_prd(prd_text: Annotated[str, "Raw PRD markdown text to analyze"]) ->
     # Add metadata for observability
     result["_metadata"] = {
         "prompt_version": PROMPT_VERSION,
-        "model": "gpt-4o",
+        "model": settings.openai_model,
         "usage": usage,
         "analyzed_at": datetime.now(UTC).isoformat(),
     }
 
     return result
+
+
+@app.tool
+def analyze_prd(prd_text: Annotated[str, "Raw PRD markdown text to analyze"]) -> dict:
+    """Analyze a PRD and extract structured requirements.
+
+    Extracts requirements with IDs, acceptance criteria, dependencies,
+    and flags ambiguous requirements (missing criteria or vague quantifiers).
+
+    Returns structured requirements with metadata including token usage.
+    """
+    return _analyze_prd_impl(prd_text)
 
 
 @app.tool
