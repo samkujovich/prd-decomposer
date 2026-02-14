@@ -48,6 +48,42 @@ class TestSettings:
         with pytest.raises(ValidationError):
             Settings()
 
+    def test_settings_max_retries_minimum_bound(self):
+        """Verify max_retries rejects values below 1."""
+        with pytest.raises(ValidationError):
+            Settings(max_retries=0)
+
+    def test_settings_max_retries_maximum_bound(self):
+        """Verify max_retries rejects values above 10."""
+        with pytest.raises(ValidationError):
+            Settings(max_retries=11)
+
+    def test_settings_max_retries_valid_bounds(self):
+        """Verify max_retries accepts values within bounds."""
+        settings_min = Settings(max_retries=1)
+        settings_max = Settings(max_retries=10)
+        assert settings_min.max_retries == 1
+        assert settings_max.max_retries == 10
+
+    def test_settings_initial_retry_delay_minimum_bound(self):
+        """Verify initial_retry_delay rejects zero and negative values."""
+        with pytest.raises(ValidationError):
+            Settings(initial_retry_delay=0)
+        with pytest.raises(ValidationError):
+            Settings(initial_retry_delay=-1.0)
+
+    def test_settings_initial_retry_delay_maximum_bound(self):
+        """Verify initial_retry_delay rejects values above 60."""
+        with pytest.raises(ValidationError):
+            Settings(initial_retry_delay=61)
+
+    def test_settings_initial_retry_delay_valid_bounds(self):
+        """Verify initial_retry_delay accepts values within bounds."""
+        settings_min = Settings(initial_retry_delay=0.001)
+        settings_max = Settings(initial_retry_delay=60)
+        assert settings_min.initial_retry_delay == 0.001
+        assert settings_max.initial_retry_delay == 60
+
 
 class TestGetSettings:
     """Tests for get_settings function."""

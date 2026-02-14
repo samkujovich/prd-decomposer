@@ -20,10 +20,16 @@ class Settings(BaseSettings):
 
     # Retry settings
     max_retries: int = Field(
-        default=3, description="Maximum retry attempts for LLM calls"
+        default=3,
+        ge=1,
+        le=10,
+        description="Maximum retry attempts for LLM calls (1-10)",
     )
     initial_retry_delay: float = Field(
-        default=1.0, description="Initial delay in seconds for retry backoff"
+        default=1.0,
+        gt=0,
+        le=60,
+        description="Initial delay in seconds for retry backoff (0-60)",
     )
 
 
