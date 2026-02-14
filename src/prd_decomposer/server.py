@@ -11,6 +11,7 @@ from arcade_mcp_server import MCPApp
 from openai import APIConnectionError, APIError, OpenAI, RateLimitError
 from pydantic import ValidationError
 
+from prd_decomposer.config import Settings, get_settings
 from prd_decomposer.models import StructuredRequirements, TicketCollection
 from prd_decomposer.prompts import (
     ANALYZE_PRD_PROMPT,
@@ -88,9 +89,9 @@ def get_client() -> OpenAI:
 
 def _call_llm_with_retry(
     messages: list[dict],
-    max_retries: int = 3,
-    initial_delay: float = 1.0,
-    temperature: float = 0.2,
+    temperature: float,
+    client: OpenAI | None = None,
+    settings: Settings | None = None,
 ) -> tuple[dict, dict]:
     """Call LLM with exponential backoff retry.
 
@@ -100,13 +101,15 @@ def _call_llm_with_retry(
     Raises:
         LLMError: If all retries fail or response is invalid.
     """
-    client = get_client()
+    client = client or get_client()
+    settings = settings or get_settings()
+
     last_error = None
 
-    for attempt in range(max_retries):
+    for attempt in range(settings.max_retries):
         try:
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model=settings.openai_model,
                 messages=messages,
                 response_format={"type": "json_object"},
                 temperature=temperature,
@@ -136,14 +139,14 @@ def _call_llm_with_retry(
 
         except RateLimitError as e:
             last_error = e
-            if attempt < max_retries - 1:  # Don't sleep after final attempt
-                delay = initial_delay * (2**attempt)
+            if attempt < settings.max_retries - 1:
+                delay = settings.initial_retry_delay * (2**attempt)
                 time.sleep(delay)
 
         except APIConnectionError as e:
             last_error = e
-            if attempt < max_retries - 1:  # Don't sleep after final attempt
-                delay = initial_delay * (2**attempt)
+            if attempt < settings.max_retries - 1:
+                delay = settings.initial_retry_delay * (2**attempt)
                 time.sleep(delay)
 
         except APIError as e:
@@ -152,22 +155,28 @@ def _call_llm_with_retry(
             if status_code and 400 <= status_code < 500:
                 raise LLMError(f"OpenAI API error: {e}")
             last_error = e
-            if attempt < max_retries - 1:  # Don't sleep after final attempt
-                delay = initial_delay * (2**attempt)
+            if attempt < settings.max_retries - 1:
+                delay = settings.initial_retry_delay * (2**attempt)
                 time.sleep(delay)
 
-    raise LLMError(f"LLM call failed after {max_retries} retries: {last_error}")
+    raise LLMError(f"LLM call failed after {settings.max_retries} retries: {last_error}")
 
 
-@app.tool
-def analyze_prd(prd_text: Annotated[str, "Raw PRD markdown text to analyze"]) -> dict:
-    """Analyze a PRD and extract structured requirements.
+def _analyze_prd_impl(
+    prd_text: str,
+    client: OpenAI | None = None,
+    settings: Settings | None = None,
+) -> dict:
+    """Internal implementation of analyze_prd with DI support.
 
     Extracts requirements with IDs, acceptance criteria, dependencies,
     and flags ambiguous requirements (missing criteria or vague quantifiers).
 
     Returns structured requirements with metadata including token usage.
     """
+    client = client or get_client()
+    settings = settings or get_settings()
+
     # Generate source hash for traceability
     source_hash = hashlib.sha256(prd_text.encode()).hexdigest()[:8]
 
@@ -175,7 +184,9 @@ def analyze_prd(prd_text: Annotated[str, "Raw PRD markdown text to analyze"]) ->
     try:
         data, usage = _call_llm_with_retry(
             messages=[{"role": "user", "content": ANALYZE_PRD_PROMPT.format(prd_text=prd_text)}],
-            temperature=0.2,
+            temperature=settings.analyze_temperature,
+            client=client,
+            settings=settings,
         )
     except LLMError as e:
         raise RuntimeError(f"Failed to analyze PRD: {e}")
@@ -194,7 +205,7 @@ def analyze_prd(prd_text: Annotated[str, "Raw PRD markdown text to analyze"]) ->
     # Add metadata for observability
     result["_metadata"] = {
         "prompt_version": PROMPT_VERSION,
-        "model": "gpt-4o",
+        "model": settings.openai_model,
         "usage": usage,
         "analyzed_at": datetime.now(UTC).isoformat(),
     }
@@ -203,17 +214,40 @@ def analyze_prd(prd_text: Annotated[str, "Raw PRD markdown text to analyze"]) ->
 
 
 @app.tool
-def decompose_to_tickets(
-    requirements: Annotated[dict, "Structured requirements from analyze_prd (required)"],
-) -> dict:
-    """Convert structured requirements into Jira-compatible epics and stories.
+def analyze_prd(prd_text: Annotated[str, "Raw PRD markdown text to analyze"]) -> dict:
+    """Analyze a PRD and extract structured requirements.
 
-    Produces epics with child stories, acceptance criteria, t-shirt sizing (S/M/L),
-    and labels. Output is ready for Jira import.
+    Extracts requirements with IDs, acceptance criteria, dependencies,
+    and flags ambiguous requirements (missing criteria or vague quantifiers).
 
-    Requires the requirements dict from analyze_prd to be passed explicitly.
+    Returns structured requirements with metadata including token usage.
     """
-    # Handle case where requirements might be passed as string
+    return _analyze_prd_impl(prd_text)
+
+
+def _decompose_to_tickets_impl(
+    requirements: dict,
+    client: OpenAI | None = None,
+    settings: Settings | None = None,
+) -> dict:
+    """Internal implementation of decompose_to_tickets with DI support.
+
+    Converts structured requirements into Jira-compatible epics and stories.
+    Produces epics with child stories, acceptance criteria, t-shirt sizing (S/M/L),
+    and labels.
+
+    Returns ticket collection with metadata including token usage.
+    """
+    client = client or get_client()
+    settings = settings or get_settings()
+
+    # Check for None or empty input first
+    if requirements is None or requirements == "":
+        raise ValueError(
+            "Requirements cannot be empty. Pass the JSON output from analyze_prd as a string."
+        )
+
+    # Handle case where requirements is passed as string (expected for MCP)
     if isinstance(requirements, str):
         try:
             requirements = json.loads(requirements)
@@ -243,7 +277,9 @@ def decompose_to_tickets(
                     ),
                 }
             ],
-            temperature=0.3,
+            temperature=settings.decompose_temperature,
+            client=client,
+            settings=settings,
         )
     except LLMError as e:
         raise RuntimeError(f"Failed to decompose requirements: {e}")
@@ -252,7 +288,7 @@ def decompose_to_tickets(
     if "metadata" not in data:
         data["metadata"] = {}
     data["metadata"]["generated_at"] = datetime.now(UTC).isoformat()
-    data["metadata"]["model"] = "gpt-4o"
+    data["metadata"]["model"] = settings.openai_model
     data["metadata"]["prompt_version"] = PROMPT_VERSION
     data["metadata"]["requirement_count"] = len(validated_input.requirements)
     data["metadata"]["usage"] = usage
@@ -268,6 +304,20 @@ def decompose_to_tickets(
         raise RuntimeError(f"LLM returned invalid ticket structure: {e}")
 
     return validated.model_dump()
+
+
+@app.tool
+def decompose_to_tickets(
+    requirements_json: Annotated[str, "JSON string of the structured requirements from analyze_prd"],
+) -> dict:
+    """Convert structured requirements into Jira-compatible epics and stories.
+
+    Produces epics with child stories, acceptance criteria, t-shirt sizing (S/M/L),
+    and labels. Output is ready for Jira import.
+
+    Pass the complete JSON output from analyze_prd as a string.
+    """
+    return _decompose_to_tickets_impl(requirements_json)
 
 
 if __name__ == "__main__":

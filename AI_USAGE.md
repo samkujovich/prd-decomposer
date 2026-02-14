@@ -12,9 +12,11 @@ This document tracks AI tool usage during development of prd-decomposer.
 ### Fully AI-Generated (with human review)
 - `src/prd_decomposer/models.py` - Pydantic model definitions
 - `src/prd_decomposer/prompts.py` - LLM prompt templates
+- `src/prd_decomposer/config.py` - Settings class with environment variable support
 - `tests/test_tools.py` - Model unit tests
 - `tests/test_server.py` - Server/tool tests with mocked LLM
 - `tests/test_prompts.py` - Prompt template tests
+- `tests/test_config.py` - Configuration validation tests
 - `evals/eval_prd_tools.py` - Arcade eval suite (8 eval cases)
 - `README.md` - Documentation
 
@@ -42,6 +44,15 @@ Claude Code performed a principal engineer code review and implemented:
 - **Observability**: Token usage tracking, prompt versioning
 - **Testing**: Expanded from 27 to 51 tests, coverage from 84% to 99%
 
+### Session 3: Configuration, Dependency Injection & Few-Shot Prompts
+Claude Code addressed additional code review feedback:
+- **Configuration**: Added `Settings` class using pydantic-settings for environment variable support (`PRD_*` prefix)
+- **Dependency Injection**: Refactored LLM-calling functions to accept optional `client` and `settings` parameters for improved testability
+- **Few-Shot Examples**: Added input/output examples to both prompts demonstrating ambiguity detection and story decomposition
+- **Bounds Validation**: Added constraints to retry config (max_retries 1-10, initial_retry_delay 0-60s)
+- **MCP Compatibility Fix**: Changed `decompose_to_tickets` parameter from `dict` to JSON string for better agent compatibility
+- **Testing**: Expanded from 51 to 67 tests
+
 ## Prompts Used
 
 Key prompts used during development:
@@ -55,8 +66,9 @@ Key prompts used during development:
 ## Quality Assurance
 
 - All AI-generated code was reviewed before committing
-- 51 unit tests with 99% code coverage
+- 67 unit tests with 98% code coverage
 - Arcade evals validate tool selection (8 eval cases)
 - Security review for path traversal and injection risks
 - Error handling review for LLM failure scenarios
 - Manual testing with 10 sample PRDs
+- End-to-end testing with OpenAI Agents SDK agent

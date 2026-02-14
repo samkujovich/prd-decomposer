@@ -9,12 +9,13 @@ import pytest
 from arcade_core.errors import FatalToolError
 from openai import APIConnectionError, APIError, RateLimitError
 
+from prd_decomposer.config import Settings
 from prd_decomposer.server import (
     LLMError,
+    _analyze_prd_impl,
     _call_llm_with_retry,
+    _decompose_to_tickets_impl,
     _is_path_allowed,
-    analyze_prd,
-    decompose_to_tickets,
     get_client,
     read_file,
 )
@@ -154,7 +155,9 @@ class TestLLMRetry:
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            data, usage = _call_llm_with_retry([{"role": "user", "content": "test"}])
+            data, usage = _call_llm_with_retry(
+                [{"role": "user", "content": "test"}], temperature=0.2
+            )
 
         assert data == {"result": "success"}
         assert usage["total_tokens"] == 150
@@ -168,7 +171,7 @@ class TestLLMRetry:
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with pytest.raises(LLMError, match="empty response"):
-                _call_llm_with_retry([{"role": "user", "content": "test"}])
+                _call_llm_with_retry([{"role": "user", "content": "test"}], temperature=0.2)
 
     def test_call_llm_with_retry_invalid_json(self):
         """Verify LLMError raised for invalid JSON."""
@@ -179,7 +182,7 @@ class TestLLMRetry:
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with pytest.raises(LLMError, match="invalid JSON"):
-                _call_llm_with_retry([{"role": "user", "content": "test"}])
+                _call_llm_with_retry([{"role": "user", "content": "test"}], temperature=0.2)
 
     def test_call_llm_with_retry_rate_limit_then_success(self):
         """Verify retry on RateLimitError eventually succeeds."""
@@ -198,10 +201,13 @@ class TestLLMRetry:
             ),
         ]
 
+        settings = Settings(initial_retry_delay=0.01)
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with patch("prd_decomposer.server.time.sleep"):  # Skip actual sleep
                 data, _usage = _call_llm_with_retry(
-                    [{"role": "user", "content": "test"}], initial_delay=0.01
+                    [{"role": "user", "content": "test"}],
+                    temperature=0.2,
+                    settings=settings,
                 )
 
         assert data == {"result": "success"}
@@ -221,10 +227,13 @@ class TestLLMRetry:
             ),
         ]
 
+        settings = Settings(initial_retry_delay=0.01)
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with patch("prd_decomposer.server.time.sleep"):
                 data, _usage = _call_llm_with_retry(
-                    [{"role": "user", "content": "test"}], initial_delay=0.01
+                    [{"role": "user", "content": "test"}],
+                    temperature=0.2,
+                    settings=settings,
                 )
 
         assert data == {"result": "success"}
@@ -238,7 +247,7 @@ class TestLLMRetry:
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with pytest.raises(LLMError, match="OpenAI API error"):
-                _call_llm_with_retry([{"role": "user", "content": "test"}])
+                _call_llm_with_retry([{"role": "user", "content": "test"}], temperature=0.2)
 
         # Should only be called once (no retries for 4xx)
         assert mock_client.chat.completions.create.call_count == 1
@@ -263,10 +272,13 @@ class TestLLMRetry:
             ),
         ]
 
+        settings = Settings(initial_retry_delay=0.01)
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with patch("prd_decomposer.server.time.sleep"):
                 data, _usage = _call_llm_with_retry(
-                    [{"role": "user", "content": "test"}], initial_delay=0.01
+                    [{"role": "user", "content": "test"}],
+                    temperature=0.2,
+                    settings=settings,
                 )
 
         assert data == {"result": "success"}
@@ -280,11 +292,14 @@ class TestLLMRetry:
         error.status_code = 500
         mock_client.chat.completions.create.side_effect = error
 
+        settings = Settings(max_retries=3, initial_retry_delay=0.01)
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with patch("prd_decomposer.server.time.sleep"):
                 with pytest.raises(LLMError, match="failed after 3 retries"):
                     _call_llm_with_retry(
-                        [{"role": "user", "content": "test"}], max_retries=3, initial_delay=0.01
+                        [{"role": "user", "content": "test"}],
+                        temperature=0.2,
+                        settings=settings,
                     )
 
         # Should be called 3 times (all retries exhausted)
@@ -297,11 +312,14 @@ class TestLLMRetry:
             message="Rate limit", response=MagicMock(status_code=429), body=None
         )
 
+        settings = Settings(max_retries=2, initial_retry_delay=0.01)
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with patch("prd_decomposer.server.time.sleep"):
                 with pytest.raises(LLMError, match="failed after 2 retries"):
                     _call_llm_with_retry(
-                        [{"role": "user", "content": "test"}], max_retries=2, initial_delay=0.01
+                        [{"role": "user", "content": "test"}],
+                        temperature=0.2,
+                        settings=settings,
                     )
 
 
@@ -334,8 +352,7 @@ class TestAnalyzePrd:
             usage=mock_usage,
         )
 
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            result = analyze_prd("Test PRD content")
+        result = _analyze_prd_impl("Test PRD content", client=mock_client)
 
         assert "requirements" in result
         assert len(result["requirements"]) == 1
@@ -360,9 +377,8 @@ class TestAnalyzePrd:
             usage=mock_usage,
         )
 
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            result1 = analyze_prd("PRD content A")
-            result2 = analyze_prd("PRD content B")
+        result1 = _analyze_prd_impl("PRD content A", client=mock_client)
+        result2 = _analyze_prd_impl("PRD content B", client=mock_client)
 
         # Different inputs should produce different hashes
         assert result1["source_hash"] != result2["source_hash"]
@@ -393,15 +409,14 @@ class TestAnalyzePrd:
             usage=mock_usage,
         )
 
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            result = analyze_prd("The API should be fast")
+        result = _analyze_prd_impl("The API should be fast", client=mock_client)
 
         assert result["requirements"][0]["ambiguity_flags"] == [
             "Vague quantifier: 'fast' without metrics"
         ]
 
     def test_analyze_prd_validates_llm_response(self):
-        """Verify analyze_prd raises FatalToolError for invalid LLM response."""
+        """Verify analyze_prd raises RuntimeError for invalid LLM response."""
         # Missing required 'priority' field
         mock_response = {
             "requirements": [
@@ -424,21 +439,20 @@ class TestAnalyzePrd:
             usage=mock_usage,
         )
 
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            with pytest.raises(FatalToolError):
-                analyze_prd("Test PRD")
+        with pytest.raises(RuntimeError, match="LLM returned invalid structure"):
+            _analyze_prd_impl("Test PRD", client=mock_client)
 
     def test_analyze_prd_llm_error_propagates(self):
-        """Verify analyze_prd raises FatalToolError when LLM call fails."""
+        """Verify analyze_prd raises RuntimeError when LLM call fails."""
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = RateLimitError(
             message="Rate limit", response=MagicMock(status_code=429), body=None
         )
 
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            with patch("prd_decomposer.server.time.sleep"):
-                with pytest.raises(FatalToolError, match="Failed to analyze PRD"):
-                    analyze_prd("Test PRD")
+        settings = Settings(initial_retry_delay=0.01)
+        with patch("prd_decomposer.server.time.sleep"):
+            with pytest.raises(RuntimeError, match="Failed to analyze PRD"):
+                _analyze_prd_impl("Test PRD", client=mock_client, settings=settings)
 
 
 class TestDecomposeToTickets:
@@ -490,8 +504,7 @@ class TestDecomposeToTickets:
             usage=mock_usage,
         )
 
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            result = decompose_to_tickets(input_requirements)
+        result = _decompose_to_tickets_impl(input_requirements, client=mock_client)
 
         assert "epics" in result
         assert len(result["epics"]) == 1
@@ -529,8 +542,7 @@ class TestDecomposeToTickets:
             usage=mock_usage,
         )
 
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            result = decompose_to_tickets(input_requirements)
+        result = _decompose_to_tickets_impl(input_requirements, client=mock_client)
 
         assert "metadata" in result
         assert "generated_at" in result["metadata"]
@@ -610,23 +622,22 @@ class TestDecomposeToTickets:
             usage=mock_usage,
         )
 
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            result = decompose_to_tickets(input_requirements)
+        result = _decompose_to_tickets_impl(input_requirements, client=mock_client)
 
         assert result["metadata"]["story_count"] == 3
 
     def test_decompose_to_tickets_validates_input(self):
-        """Verify decompose_to_tickets raises FatalToolError for invalid input."""
+        """Verify decompose_to_tickets raises ValueError for invalid input."""
         # Invalid input - missing required fields
         invalid_input = {"requirements": [{"id": "REQ-001"}]}
 
-        with pytest.raises(FatalToolError):
-            decompose_to_tickets(invalid_input)
+        with pytest.raises(ValueError, match="Invalid requirements structure"):
+            _decompose_to_tickets_impl(invalid_input, client=MagicMock())
 
     def test_decompose_to_tickets_empty_requirements_raises(self):
         """Verify decompose_to_tickets raises for empty requirements."""
-        with pytest.raises(FatalToolError):
-            decompose_to_tickets({})
+        with pytest.raises(ValueError, match="Requirements cannot be empty"):
+            _decompose_to_tickets_impl({}, client=MagicMock())
 
     def test_decompose_to_tickets_strips_internal_metadata(self):
         """Verify decompose_to_tickets handles _metadata from analyze_prd."""
@@ -659,14 +670,13 @@ class TestDecomposeToTickets:
             usage=mock_usage,
         )
 
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            result = decompose_to_tickets(input_requirements)
+        result = _decompose_to_tickets_impl(input_requirements, client=mock_client)
 
         # Should succeed - _metadata is stripped before validation
         assert "epics" in result
 
     def test_decompose_to_tickets_validates_llm_response(self):
-        """Verify decompose_to_tickets raises FatalToolError for invalid LLM response."""
+        """Verify decompose_to_tickets raises RuntimeError for invalid LLM response."""
         input_requirements = {
             "requirements": [
                 {
@@ -712,9 +722,8 @@ class TestDecomposeToTickets:
             usage=mock_usage,
         )
 
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            with pytest.raises(FatalToolError):
-                decompose_to_tickets(input_requirements)
+        with pytest.raises(RuntimeError, match="LLM returned invalid ticket structure"):
+            _decompose_to_tickets_impl(input_requirements, client=mock_client)
 
     def test_decompose_to_tickets_string_requirements(self):
         """Verify decompose_to_tickets handles string (JSON) requirements."""
@@ -746,19 +755,18 @@ class TestDecomposeToTickets:
             usage=mock_usage,
         )
 
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            # Pass as JSON string instead of dict
-            result = decompose_to_tickets(json.dumps(input_requirements))
+        # Pass as JSON string instead of dict
+        result = _decompose_to_tickets_impl(json.dumps(input_requirements), client=mock_client)
 
         assert "epics" in result
 
     def test_decompose_to_tickets_invalid_json_string(self):
         """Verify decompose_to_tickets raises for invalid JSON string."""
-        with pytest.raises(FatalToolError, match="Invalid JSON"):
-            decompose_to_tickets("not valid json {")
+        with pytest.raises(ValueError, match="Invalid JSON"):
+            _decompose_to_tickets_impl("not valid json {", client=MagicMock())
 
     def test_decompose_to_tickets_llm_error_propagates(self):
-        """Verify decompose_to_tickets raises FatalToolError when LLM call fails."""
+        """Verify decompose_to_tickets raises RuntimeError when LLM call fails."""
         input_requirements = {
             "requirements": [
                 {
@@ -780,10 +788,12 @@ class TestDecomposeToTickets:
             message="Rate limit", response=MagicMock(status_code=429), body=None
         )
 
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            with patch("prd_decomposer.server.time.sleep"):
-                with pytest.raises(FatalToolError, match="Failed to decompose"):
-                    decompose_to_tickets(input_requirements)
+        settings = Settings(initial_retry_delay=0.01)
+        with patch("prd_decomposer.server.time.sleep"):
+            with pytest.raises(RuntimeError, match="Failed to decompose"):
+                _decompose_to_tickets_impl(
+                    input_requirements, client=mock_client, settings=settings
+                )
 
 
 class TestIntegrationPipeline:
@@ -844,19 +854,20 @@ class TestIntegrationPipeline:
             ),
         ]
 
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            # Step 1: Analyze
-            requirements = analyze_prd("# Sample PRD\n\nUser auth required.")
+        # Step 1: Analyze with direct injection
+        requirements = _analyze_prd_impl(
+            "# Sample PRD\n\nUser auth required.", client=mock_client
+        )
 
-            assert "requirements" in requirements
-            assert len(requirements["requirements"]) == 1
-            assert "_metadata" in requirements
+        assert "requirements" in requirements
+        assert len(requirements["requirements"]) == 1
+        assert "_metadata" in requirements
 
-            # Step 2: Decompose (passing requirements explicitly)
-            tickets = decompose_to_tickets(requirements)
+        # Step 2: Decompose with direct injection (passing requirements explicitly)
+        tickets = _decompose_to_tickets_impl(requirements, client=mock_client)
 
-            assert "epics" in tickets
-            assert len(tickets["epics"]) == 1
-            assert tickets["epics"][0]["stories"][0]["requirement_ids"] == ["REQ-001"]
-            assert "metadata" in tickets
-            assert tickets["metadata"]["requirement_count"] == 1
+        assert "epics" in tickets
+        assert len(tickets["epics"]) == 1
+        assert tickets["epics"][0]["stories"][0]["requirement_ids"] == ["REQ-001"]
+        assert "metadata" in tickets
+        assert tickets["metadata"]["requirement_count"] == 1
