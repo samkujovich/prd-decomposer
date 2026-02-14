@@ -227,6 +227,12 @@ Ambiguity detection is just the start. The same pattern could flag:
 - **UX concerns** - Flows that might frustrate users (too many steps, unclear affordances)
 - **Security considerations** - Auth, data handling, PII that needs review
 
+### Continuous Sync & Bidirectional Updates
+Run agents continuously to keep PRDs and Jira in sync:
+- **PRD → Jira**: When a PRD changes, automatically detect deltas and update/create tickets
+- **Jira → PRD**: When ticket status changes (in progress, blocked, complete), reflect it back in the PRD
+- **Real-time status dashboard**: Product and non-technical stakeholders see live implementation status tied to the high-level requirements doc—no more "what's the status of X?" meetings
+
 ## License
 
 MIT
