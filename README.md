@@ -33,9 +33,9 @@ Built with [arcade-mcp](https://github.com/ArcadeAI/arcade-mcp).
 
 ### `read_file`
 
-Reads a file from the filesystem.
+Reads a file from the filesystem (restricted to working directory for security).
 
-**Input:** File path (relative or absolute)
+**Input:** File path (relative to working directory)
 **Output:** File contents as string
 
 ### `analyze_prd`
@@ -54,13 +54,28 @@ Analyzes raw PRD text and extracts structured requirements.
 
 Converts structured requirements into Jira-compatible tickets.
 
-**Input:** Structured requirements from `analyze_prd` (or uses cached result if not provided)
+**Input:** Structured requirements from `analyze_prd` (required)
 **Output:** Epics and stories with:
 - Clear titles and descriptions
 - Acceptance criteria
 - T-shirt sizing (S/M/L)
 - Labels
 - Traceability back to requirements
+
+## Features
+
+### Security
+- Path traversal protection restricts file access to working directory
+- Symlink resolution prevents bypass attacks
+
+### Reliability
+- Automatic retry with exponential backoff for rate limits and connection errors
+- Graceful error handling with clear error messages
+
+### Observability
+- Token usage tracking in metadata (`prompt_tokens`, `completion_tokens`, `total_tokens`)
+- Prompt versioning for traceability (`PROMPT_VERSION`)
+- Generation timestamps and model info in outputs
 
 ## Setup
 
@@ -127,7 +142,7 @@ uv run python src/prd_decomposer/server.py
 ### Run Tests
 
 ```bash
-# Unit tests (27 tests, 94% coverage)
+# Unit tests (51 tests, 99% coverage)
 uv run pytest tests/ -v
 
 # With coverage report
