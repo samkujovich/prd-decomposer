@@ -2,14 +2,13 @@
 
 import hashlib
 import json
-import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
 from arcade_mcp_server import MCPApp
-from openai import OpenAI, APIError, APIConnectionError, RateLimitError
+from openai import APIConnectionError, APIError, OpenAI, RateLimitError
 from pydantic import ValidationError
 
 from prd_decomposer.models import StructuredRequirements, TicketCollection
@@ -34,6 +33,7 @@ ALLOWED_DIRECTORIES: list[Path] = [
 
 class LLMError(Exception):
     """Raised when LLM call fails after retries."""
+
     pass
 
 
@@ -45,8 +45,7 @@ def _is_path_allowed(path: Path) -> bool:
     try:
         resolved = path.resolve()
         return any(
-            resolved == allowed or allowed in resolved.parents
-            for allowed in ALLOWED_DIRECTORIES
+            resolved == allowed or allowed in resolved.parents for allowed in ALLOWED_DIRECTORIES
         )
     except (OSError, ValueError):
         return False
@@ -54,7 +53,7 @@ def _is_path_allowed(path: Path) -> bool:
 
 @app.tool
 def read_file(
-    file_path: Annotated[str, "Path to the file to read (relative to working directory)"]
+    file_path: Annotated[str, "Path to the file to read (relative to working directory)"],
 ) -> str:
     """Read a file from the filesystem and return its contents.
 
@@ -138,13 +137,13 @@ def _call_llm_with_retry(
         except RateLimitError as e:
             last_error = e
             if attempt < max_retries - 1:  # Don't sleep after final attempt
-                delay = initial_delay * (2 ** attempt)
+                delay = initial_delay * (2**attempt)
                 time.sleep(delay)
 
         except APIConnectionError as e:
             last_error = e
             if attempt < max_retries - 1:  # Don't sleep after final attempt
-                delay = initial_delay * (2 ** attempt)
+                delay = initial_delay * (2**attempt)
                 time.sleep(delay)
 
         except APIError as e:
@@ -154,16 +153,14 @@ def _call_llm_with_retry(
                 raise LLMError(f"OpenAI API error: {e}")
             last_error = e
             if attempt < max_retries - 1:  # Don't sleep after final attempt
-                delay = initial_delay * (2 ** attempt)
+                delay = initial_delay * (2**attempt)
                 time.sleep(delay)
 
     raise LLMError(f"LLM call failed after {max_retries} retries: {last_error}")
 
 
 @app.tool
-def analyze_prd(
-    prd_text: Annotated[str, "Raw PRD markdown text to analyze"]
-) -> dict:
+def analyze_prd(prd_text: Annotated[str, "Raw PRD markdown text to analyze"]) -> dict:
     """Analyze a PRD and extract structured requirements.
 
     Extracts requirements with IDs, acceptance criteria, dependencies,
@@ -177,12 +174,7 @@ def analyze_prd(
     # Call LLM with retry
     try:
         data, usage = _call_llm_with_retry(
-            messages=[
-                {
-                    "role": "user",
-                    "content": ANALYZE_PRD_PROMPT.format(prd_text=prd_text)
-                }
-            ],
+            messages=[{"role": "user", "content": ANALYZE_PRD_PROMPT.format(prd_text=prd_text)}],
             temperature=0.2,
         )
     except LLMError as e:
@@ -204,7 +196,7 @@ def analyze_prd(
         "prompt_version": PROMPT_VERSION,
         "model": "gpt-4o",
         "usage": usage,
-        "analyzed_at": datetime.now(timezone.utc).isoformat(),
+        "analyzed_at": datetime.now(UTC).isoformat(),
     }
 
     return result
@@ -212,7 +204,7 @@ def analyze_prd(
 
 @app.tool
 def decompose_to_tickets(
-    requirements: Annotated[dict, "Structured requirements from analyze_prd (required)"]
+    requirements: Annotated[dict, "Structured requirements from analyze_prd (required)"],
 ) -> dict:
     """Convert structured requirements into Jira-compatible epics and stories.
 
@@ -248,7 +240,7 @@ def decompose_to_tickets(
                     "role": "user",
                     "content": DECOMPOSE_TO_TICKETS_PROMPT.format(
                         requirements_json=validated_input.model_dump_json(indent=2)
-                    )
+                    ),
                 }
             ],
             temperature=0.3,
@@ -259,7 +251,7 @@ def decompose_to_tickets(
     # Add metadata if not present
     if "metadata" not in data:
         data["metadata"] = {}
-    data["metadata"]["generated_at"] = datetime.now(timezone.utc).isoformat()
+    data["metadata"]["generated_at"] = datetime.now(UTC).isoformat()
     data["metadata"]["model"] = "gpt-4o"
     data["metadata"]["prompt_version"] = PROMPT_VERSION
     data["metadata"]["requirement_count"] = len(validated_input.requirements)

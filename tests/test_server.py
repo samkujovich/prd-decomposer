@@ -7,18 +7,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from arcade_core.errors import FatalToolError
-from openai import APIError, APIConnectionError, RateLimitError
-from pydantic import ValidationError
+from openai import APIConnectionError, APIError, RateLimitError
 
 from prd_decomposer.server import (
+    LLMError,
+    _call_llm_with_retry,
+    _is_path_allowed,
     analyze_prd,
     decompose_to_tickets,
     get_client,
     read_file,
-    _is_path_allowed,
-    ALLOWED_DIRECTORIES,
-    LLMError,
-    _call_llm_with_retry,
 )
 
 
@@ -29,6 +27,7 @@ class TestReadFile:
         """Verify read_file returns file contents."""
         # Add tmp_path to allowed directories for this test
         import prd_decomposer.server as server_module
+
         original_allowed = server_module.ALLOWED_DIRECTORIES.copy()
         server_module.ALLOWED_DIRECTORIES.append(tmp_path)
 
@@ -92,6 +91,7 @@ class TestReadFileEdgeCases:
     def test_read_file_directory_raises_error(self, tmp_path, monkeypatch):
         """Verify read_file raises error when path is a directory."""
         import prd_decomposer.server as server_module
+
         original_allowed = server_module.ALLOWED_DIRECTORIES.copy()
         server_module.ALLOWED_DIRECTORIES.append(tmp_path)
 
@@ -114,6 +114,7 @@ class TestGetClient:
 
             # Reset the global _client to test initialization
             import prd_decomposer.server as server_module
+
             server_module._client = None
 
             client = get_client()
@@ -127,6 +128,7 @@ class TestGetClient:
             mock_openai.return_value = mock_client
 
             import prd_decomposer.server as server_module
+
             server_module._client = None
 
             client1 = get_client()
@@ -143,16 +145,12 @@ class TestLLMRetry:
     def test_call_llm_with_retry_success(self):
         """Verify successful LLM call returns data and usage."""
         mock_response = {"result": "success"}
-        mock_usage = MagicMock(
-            prompt_tokens=100,
-            completion_tokens=50,
-            total_tokens=150
-        )
+        mock_usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
 
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
             choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
-            usage=mock_usage
+            usage=mock_usage,
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -192,21 +190,18 @@ class TestLLMRetry:
         # First call raises RateLimitError, second succeeds
         mock_client.chat.completions.create.side_effect = [
             RateLimitError(
-                message="Rate limit exceeded",
-                response=MagicMock(status_code=429),
-                body=None
+                message="Rate limit exceeded", response=MagicMock(status_code=429), body=None
             ),
             MagicMock(
                 choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
-                usage=mock_usage
+                usage=mock_usage,
             ),
         ]
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with patch("prd_decomposer.server.time.sleep"):  # Skip actual sleep
-                data, usage = _call_llm_with_retry(
-                    [{"role": "user", "content": "test"}],
-                    initial_delay=0.01
+                data, _usage = _call_llm_with_retry(
+                    [{"role": "user", "content": "test"}], initial_delay=0.01
                 )
 
         assert data == {"result": "success"}
@@ -222,15 +217,14 @@ class TestLLMRetry:
             APIConnectionError(request=MagicMock()),
             MagicMock(
                 choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
-                usage=mock_usage
+                usage=mock_usage,
             ),
         ]
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with patch("prd_decomposer.server.time.sleep"):
-                data, usage = _call_llm_with_retry(
-                    [{"role": "user", "content": "test"}],
-                    initial_delay=0.01
+                data, _usage = _call_llm_with_retry(
+                    [{"role": "user", "content": "test"}], initial_delay=0.01
                 )
 
         assert data == {"result": "success"}
@@ -265,15 +259,14 @@ class TestLLMRetry:
             error,
             MagicMock(
                 choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
-                usage=mock_usage
+                usage=mock_usage,
             ),
         ]
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with patch("prd_decomposer.server.time.sleep"):
-                data, usage = _call_llm_with_retry(
-                    [{"role": "user", "content": "test"}],
-                    initial_delay=0.01
+                data, _usage = _call_llm_with_retry(
+                    [{"role": "user", "content": "test"}], initial_delay=0.01
                 )
 
         assert data == {"result": "success"}
@@ -291,9 +284,7 @@ class TestLLMRetry:
             with patch("prd_decomposer.server.time.sleep"):
                 with pytest.raises(LLMError, match="failed after 3 retries"):
                     _call_llm_with_retry(
-                        [{"role": "user", "content": "test"}],
-                        max_retries=3,
-                        initial_delay=0.01
+                        [{"role": "user", "content": "test"}], max_retries=3, initial_delay=0.01
                     )
 
         # Should be called 3 times (all retries exhausted)
@@ -303,18 +294,14 @@ class TestLLMRetry:
         """Verify LLMError raised after all retries exhausted."""
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = RateLimitError(
-            message="Rate limit",
-            response=MagicMock(status_code=429),
-            body=None
+            message="Rate limit", response=MagicMock(status_code=429), body=None
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
             with patch("prd_decomposer.server.time.sleep"):
                 with pytest.raises(LLMError, match="failed after 2 retries"):
                     _call_llm_with_retry(
-                        [{"role": "user", "content": "test"}],
-                        max_retries=2,
-                        initial_delay=0.01
+                        [{"role": "user", "content": "test"}], max_retries=2, initial_delay=0.01
                     )
 
 
@@ -332,23 +319,19 @@ class TestAnalyzePrd:
                     "acceptance_criteria": ["Login form exists"],
                     "dependencies": [],
                     "ambiguity_flags": [],
-                    "priority": "high"
+                    "priority": "high",
                 }
             ],
             "summary": "Authentication system PRD",
-            "source_hash": "abc12345"
+            "source_hash": "abc12345",
         }
 
-        mock_usage = MagicMock(
-            prompt_tokens=100,
-            completion_tokens=50,
-            total_tokens=150
-        )
+        mock_usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
 
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
             choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
-            usage=mock_usage
+            usage=mock_usage,
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -367,18 +350,14 @@ class TestAnalyzePrd:
 
     def test_analyze_prd_generates_source_hash(self):
         """Verify analyze_prd generates a hash from the input text."""
-        mock_response = {
-            "requirements": [],
-            "summary": "Empty PRD",
-            "source_hash": "ignored"
-        }
+        mock_response = {"requirements": [], "summary": "Empty PRD", "source_hash": "ignored"}
 
         mock_usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
 
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
             choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
-            usage=mock_usage
+            usage=mock_usage,
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -399,11 +378,11 @@ class TestAnalyzePrd:
                     "acceptance_criteria": [],
                     "dependencies": [],
                     "ambiguity_flags": ["Vague quantifier: 'fast' without metrics"],
-                    "priority": "high"
+                    "priority": "high",
                 }
             ],
             "summary": "Vague PRD",
-            "source_hash": "12345678"
+            "source_hash": "12345678",
         }
 
         mock_usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
@@ -411,7 +390,7 @@ class TestAnalyzePrd:
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
             choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
-            usage=mock_usage
+            usage=mock_usage,
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -429,12 +408,12 @@ class TestAnalyzePrd:
                 {
                     "id": "REQ-001",
                     "title": "Test",
-                    "description": "Test"
+                    "description": "Test",
                     # Missing: acceptance_criteria, dependencies, ambiguity_flags, priority
                 }
             ],
             "summary": "Test",
-            "source_hash": "12345678"
+            "source_hash": "12345678",
         }
 
         mock_usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
@@ -442,7 +421,7 @@ class TestAnalyzePrd:
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
             choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
-            usage=mock_usage
+            usage=mock_usage,
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -453,9 +432,7 @@ class TestAnalyzePrd:
         """Verify analyze_prd raises FatalToolError when LLM call fails."""
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = RateLimitError(
-            message="Rate limit",
-            response=MagicMock(status_code=429),
-            body=None
+            message="Rate limit", response=MagicMock(status_code=429), body=None
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -478,11 +455,11 @@ class TestDecomposeToTickets:
                     "acceptance_criteria": ["Login works"],
                     "dependencies": [],
                     "ambiguity_flags": [],
-                    "priority": "high"
+                    "priority": "high",
                 }
             ],
             "summary": "Auth PRD",
-            "source_hash": "abc12345"
+            "source_hash": "abc12345",
         }
 
         mock_response = {
@@ -497,10 +474,10 @@ class TestDecomposeToTickets:
                             "acceptance_criteria": ["Returns JWT"],
                             "size": "M",
                             "labels": ["backend", "auth"],
-                            "requirement_ids": ["REQ-001"]
+                            "requirement_ids": ["REQ-001"],
                         }
                     ],
-                    "labels": ["auth"]
+                    "labels": ["auth"],
                 }
             ]
         }
@@ -510,7 +487,7 @@ class TestDecomposeToTickets:
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
             choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
-            usage=mock_usage
+            usage=mock_usage,
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -533,22 +510,15 @@ class TestDecomposeToTickets:
                     "acceptance_criteria": [],
                     "dependencies": [],
                     "ambiguity_flags": [],
-                    "priority": "low"
+                    "priority": "low",
                 }
             ],
             "summary": "Test",
-            "source_hash": "12345678"
+            "source_hash": "12345678",
         }
 
         mock_response = {
-            "epics": [
-                {
-                    "title": "Epic",
-                    "description": "Desc",
-                    "stories": [],
-                    "labels": []
-                }
-            ]
+            "epics": [{"title": "Epic", "description": "Desc", "stories": [], "labels": []}]
         }
 
         mock_usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
@@ -556,7 +526,7 @@ class TestDecomposeToTickets:
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
             choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
-            usage=mock_usage
+            usage=mock_usage,
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -582,11 +552,11 @@ class TestDecomposeToTickets:
                     "acceptance_criteria": [],
                     "dependencies": [],
                     "ambiguity_flags": [],
-                    "priority": "medium"
+                    "priority": "medium",
                 }
             ],
             "summary": "Test",
-            "source_hash": "12345678"
+            "source_hash": "12345678",
         }
 
         mock_response = {
@@ -595,22 +565,40 @@ class TestDecomposeToTickets:
                     "title": "Epic 1",
                     "description": "Desc",
                     "stories": [
-                        {"title": "S1", "description": "D", "acceptance_criteria": [],
-                         "size": "S", "labels": [], "requirement_ids": []},
-                        {"title": "S2", "description": "D", "acceptance_criteria": [],
-                         "size": "S", "labels": [], "requirement_ids": []}
+                        {
+                            "title": "S1",
+                            "description": "D",
+                            "acceptance_criteria": [],
+                            "size": "S",
+                            "labels": [],
+                            "requirement_ids": [],
+                        },
+                        {
+                            "title": "S2",
+                            "description": "D",
+                            "acceptance_criteria": [],
+                            "size": "S",
+                            "labels": [],
+                            "requirement_ids": [],
+                        },
                     ],
-                    "labels": []
+                    "labels": [],
                 },
                 {
                     "title": "Epic 2",
                     "description": "Desc",
                     "stories": [
-                        {"title": "S3", "description": "D", "acceptance_criteria": [],
-                         "size": "M", "labels": [], "requirement_ids": []}
+                        {
+                            "title": "S3",
+                            "description": "D",
+                            "acceptance_criteria": [],
+                            "size": "M",
+                            "labels": [],
+                            "requirement_ids": [],
+                        }
                     ],
-                    "labels": []
-                }
+                    "labels": [],
+                },
             ]
         }
 
@@ -619,7 +607,7 @@ class TestDecomposeToTickets:
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
             choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
-            usage=mock_usage
+            usage=mock_usage,
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -651,23 +639,16 @@ class TestDecomposeToTickets:
                     "acceptance_criteria": [],
                     "dependencies": [],
                     "ambiguity_flags": [],
-                    "priority": "low"
+                    "priority": "low",
                 }
             ],
             "summary": "Test",
             "source_hash": "12345678",
-            "_metadata": {"prompt_version": "1.0.0", "usage": {}}  # Should be stripped
+            "_metadata": {"prompt_version": "1.0.0", "usage": {}},  # Should be stripped
         }
 
         mock_response = {
-            "epics": [
-                {
-                    "title": "Epic",
-                    "description": "Desc",
-                    "stories": [],
-                    "labels": []
-                }
-            ]
+            "epics": [{"title": "Epic", "description": "Desc", "stories": [], "labels": []}]
         }
 
         mock_usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
@@ -675,7 +656,7 @@ class TestDecomposeToTickets:
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
             choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
-            usage=mock_usage
+            usage=mock_usage,
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -695,11 +676,11 @@ class TestDecomposeToTickets:
                     "acceptance_criteria": [],
                     "dependencies": [],
                     "ambiguity_flags": [],
-                    "priority": "high"
+                    "priority": "high",
                 }
             ],
             "summary": "Test",
-            "source_hash": "12345678"
+            "source_hash": "12345678",
         }
 
         # Invalid response - story has invalid size
@@ -715,10 +696,10 @@ class TestDecomposeToTickets:
                             "acceptance_criteria": [],
                             "size": "XL",  # Invalid - must be S/M/L
                             "labels": [],
-                            "requirement_ids": []
+                            "requirement_ids": [],
                         }
                     ],
-                    "labels": []
+                    "labels": [],
                 }
             ]
         }
@@ -728,7 +709,7 @@ class TestDecomposeToTickets:
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
             choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
-            usage=mock_usage
+            usage=mock_usage,
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -746,22 +727,15 @@ class TestDecomposeToTickets:
                     "acceptance_criteria": [],
                     "dependencies": [],
                     "ambiguity_flags": [],
-                    "priority": "low"
+                    "priority": "low",
                 }
             ],
             "summary": "Test",
-            "source_hash": "12345678"
+            "source_hash": "12345678",
         }
 
         mock_response = {
-            "epics": [
-                {
-                    "title": "Epic",
-                    "description": "Desc",
-                    "stories": [],
-                    "labels": []
-                }
-            ]
+            "epics": [{"title": "Epic", "description": "Desc", "stories": [], "labels": []}]
         }
 
         mock_usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
@@ -769,7 +743,7 @@ class TestDecomposeToTickets:
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = MagicMock(
             choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
-            usage=mock_usage
+            usage=mock_usage,
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -794,18 +768,16 @@ class TestDecomposeToTickets:
                     "acceptance_criteria": [],
                     "dependencies": [],
                     "ambiguity_flags": [],
-                    "priority": "high"
+                    "priority": "high",
                 }
             ],
             "summary": "Test",
-            "source_hash": "12345678"
+            "source_hash": "12345678",
         }
 
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = RateLimitError(
-            message="Rate limit",
-            response=MagicMock(status_code=429),
-            body=None
+            message="Rate limit", response=MagicMock(status_code=429), body=None
         )
 
         with patch("prd_decomposer.server.get_client", return_value=mock_client):
@@ -829,11 +801,11 @@ class TestIntegrationPipeline:
                     "acceptance_criteria": ["Login form exists", "JWT issued"],
                     "dependencies": [],
                     "ambiguity_flags": [],
-                    "priority": "high"
+                    "priority": "high",
                 }
             ],
             "summary": "Auth system",
-            "source_hash": "abc12345"
+            "source_hash": "abc12345",
         }
 
         # Mock decompose_to_tickets response
@@ -849,10 +821,10 @@ class TestIntegrationPipeline:
                             "acceptance_criteria": ["Returns JWT"],
                             "size": "M",
                             "labels": ["backend"],
-                            "requirement_ids": ["REQ-001"]
+                            "requirement_ids": ["REQ-001"],
                         }
                     ],
-                    "labels": ["auth"]
+                    "labels": ["auth"],
                 }
             ]
         }
@@ -864,11 +836,11 @@ class TestIntegrationPipeline:
         mock_client.chat.completions.create.side_effect = [
             MagicMock(
                 choices=[MagicMock(message=MagicMock(content=json.dumps(analyze_response)))],
-                usage=mock_usage
+                usage=mock_usage,
             ),
             MagicMock(
                 choices=[MagicMock(message=MagicMock(content=json.dumps(decompose_response)))],
-                usage=mock_usage
+                usage=mock_usage,
             ),
         ]
 

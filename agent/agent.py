@@ -68,13 +68,9 @@ async def main() -> None:
 
     # Connect to MCP server via stdio
     async with MCPServerStdio(
-        params=MCPServerStdioParams(
-            command="uv",
-            args=["run", "python", str(server_path)]
-        ),
-        client_session_timeout_seconds=120  # LLM calls can take 30+ seconds
+        params=MCPServerStdioParams(command="uv", args=["run", "python", str(server_path)]),
+        client_session_timeout_seconds=120,  # LLM calls can take 30+ seconds
     ) as mcp_server:
-
         agent = Agent(
             name="PRD Decomposer",
             instructions=AGENT_INSTRUCTIONS,
@@ -102,7 +98,7 @@ async def main() -> None:
                     continue
 
                 # Build input: previous history + new user message
-                current_input = conversation_history + [{"role": "user", "content": user_input}]
+                current_input = [*conversation_history, {"role": "user", "content": user_input}]
 
                 # Run with full conversation history
                 result = await runner.run(agent, current_input)

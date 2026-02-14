@@ -39,9 +39,7 @@ Workflow:
     # Path to the MCP server
     server_path = Path(__file__).parent.parent / "src" / "prd_decomposer" / "server.py"
 
-    await suite.add_mcp_stdio_server(
-        command=["uv", "run", "python", str(server_path)]
-    )
+    await suite.add_mcp_stdio_server(command=["uv", "run", "python", str(server_path)])
 
     # =========================================================================
     # TOOL SELECTION EVALS
@@ -54,12 +52,12 @@ Workflow:
         expected_tool_calls=[
             ExpectedMCPToolCall(
                 tool_name="analyze_prd",
-                parameters={"prd_text": "# Feature: User Settings\n\nUsers should be able to update their email preferences."}
+                parameters={
+                    "prd_text": "# Feature: User Settings\n\nUsers should be able to update their email preferences."
+                },
             )
         ],
-        critics=[
-            BinaryCritic(critic_field="prd_text", weight=1.0)
-        ],
+        critics=[BinaryCritic(critic_field="prd_text", weight=1.0)],
     )
 
     # Eval 2: Does the LLM select analyze_prd for implicit requests?
@@ -69,12 +67,12 @@ Workflow:
         expected_tool_calls=[
             ExpectedMCPToolCall(
                 tool_name="analyze_prd",
-                parameters={"prd_text": "# API Versioning\n\nImplement API versioning with v1/v2 prefixes."}
+                parameters={
+                    "prd_text": "# API Versioning\n\nImplement API versioning with v1/v2 prefixes."
+                },
             )
         ],
-        critics=[
-            BinaryCritic(critic_field="prd_text", weight=1.0)
-        ],
+        critics=[BinaryCritic(critic_field="prd_text", weight=1.0)],
     )
 
     # Eval 3: Does decompose_to_tickets get selected for ticket generation?
@@ -87,11 +85,11 @@ Workflow:
                 "acceptance_criteria": ["Login form exists"],
                 "dependencies": [],
                 "ambiguity_flags": [],
-                "priority": "high"
+                "priority": "high",
             }
         ],
         "summary": "Authentication feature",
-        "source_hash": "abc12345"
+        "source_hash": "abc12345",
     }
 
     suite.add_case(
@@ -99,13 +97,10 @@ Workflow:
         user_message=f"Turn these requirements into Jira tickets: {sample_requirements}",
         expected_tool_calls=[
             ExpectedMCPToolCall(
-                tool_name="decompose_to_tickets",
-                parameters={"requirements": sample_requirements}
+                tool_name="decompose_to_tickets", parameters={"requirements": sample_requirements}
             )
         ],
-        critics=[
-            BinaryCritic(critic_field="requirements", weight=1.0)
-        ],
+        critics=[BinaryCritic(critic_field="requirements", weight=1.0)],
     )
 
     # Eval 4: Does the LLM understand "create stories" means decompose?
@@ -114,13 +109,10 @@ Workflow:
         user_message=f"Create Jira stories from these requirements: {sample_requirements}",
         expected_tool_calls=[
             ExpectedMCPToolCall(
-                tool_name="decompose_to_tickets",
-                parameters={"requirements": sample_requirements}
+                tool_name="decompose_to_tickets", parameters={"requirements": sample_requirements}
             )
         ],
-        critics=[
-            BinaryCritic(critic_field="requirements", weight=1.0)
-        ],
+        critics=[BinaryCritic(critic_field="requirements", weight=1.0)],
     )
 
     # =========================================================================
@@ -134,14 +126,14 @@ Workflow:
         expected_tool_calls=[
             ExpectedMCPToolCall(
                 tool_name="read_file",
-                parameters={"file_path": "samples/sample_prd_01_rate_limiting.md"}
+                parameters={"file_path": "samples/sample_prd_01_rate_limiting.md"},
             )
         ],
         critics=[
             SimilarityCritic(
                 critic_field="file_path",
                 weight=1.0,
-                similarity_threshold=0.8  # Allow minor path variations
+                similarity_threshold=0.8,  # Allow minor path variations
             )
         ],
     )
@@ -152,17 +144,10 @@ Workflow:
         user_message="Read and analyze docs/feature-spec.md for me",
         expected_tool_calls=[
             ExpectedMCPToolCall(
-                tool_name="read_file",
-                parameters={"file_path": "docs/feature-spec.md"}
+                tool_name="read_file", parameters={"file_path": "docs/feature-spec.md"}
             )
         ],
-        critics=[
-            SimilarityCritic(
-                critic_field="file_path",
-                weight=1.0,
-                similarity_threshold=0.8
-            )
-        ],
+        critics=[SimilarityCritic(critic_field="file_path", weight=1.0, similarity_threshold=0.8)],
     )
 
     # =========================================================================
@@ -186,15 +171,14 @@ Users must be able to reset their password via email.
         user_message=f"Extract the requirements from this PRD:\n\n{prd_with_clear_requirement}",
         expected_tool_calls=[
             ExpectedMCPToolCall(
-                tool_name="analyze_prd",
-                parameters={"prd_text": prd_with_clear_requirement}
+                tool_name="analyze_prd", parameters={"prd_text": prd_with_clear_requirement}
             )
         ],
         critics=[
             SimilarityCritic(
                 critic_field="prd_text",
                 weight=1.0,
-                similarity_threshold=0.9  # Should capture most of the PRD
+                similarity_threshold=0.9,  # Should capture most of the PRD
             )
         ],
     )
@@ -209,14 +193,9 @@ It needs to scale well as we grow."""
         name="Handle vague PRD language",
         user_message=f"What requirements can you extract from this? Flag any ambiguities:\n\n{vague_prd}",
         expected_tool_calls=[
-            ExpectedMCPToolCall(
-                tool_name="analyze_prd",
-                parameters={"prd_text": vague_prd}
-            )
+            ExpectedMCPToolCall(tool_name="analyze_prd", parameters={"prd_text": vague_prd})
         ],
-        critics=[
-            BinaryCritic(critic_field="prd_text", weight=1.0)
-        ],
+        critics=[BinaryCritic(critic_field="prd_text", weight=1.0)],
     )
 
     return suite

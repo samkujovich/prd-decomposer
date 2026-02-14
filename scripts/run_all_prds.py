@@ -13,7 +13,7 @@ from prd_decomposer.server import analyze_prd, decompose_to_tickets, read_file
 
 def process_prd(prd_path: Path, output_dir: Path) -> dict:
     """Process a single PRD and return results."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Processing: {prd_path.name}")
     print("=" * 60)
 
@@ -28,8 +28,7 @@ def process_prd(prd_path: Path, output_dir: Path) -> dict:
 
     # Count ambiguities
     ambiguity_count = sum(
-        len(req.get("ambiguity_flags", []))
-        for req in requirements["requirements"]
+        len(req.get("ambiguity_flags", [])) for req in requirements["requirements"]
     )
     print(f"  Ambiguity flags: {ambiguity_count}")
 
@@ -85,13 +84,10 @@ def main() -> None:
             results.append(result)
         except Exception as e:
             print(f"  ERROR: {e}")
-            results.append({
-                "prd": prd_path.name,
-                "error": str(e)
-            })
+            results.append({"prd": prd_path.name, "error": str(e)})
 
     # Print summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("SUMMARY")
     print("=" * 60)
     print(f"{'PRD':<45} {'Reqs':>5} {'Ambig':>6} {'Epics':>6} {'Stories':>8}")
@@ -106,7 +102,9 @@ def main() -> None:
         if "error" in r:
             print(f"{r['prd']:<45} ERROR: {r['error']}")
         else:
-            print(f"{r['prd']:<45} {r['requirements_count']:>5} {r['ambiguity_count']:>6} {r['epic_count']:>6} {r['story_count']:>8}")
+            print(
+                f"{r['prd']:<45} {r['requirements_count']:>5} {r['ambiguity_count']:>6} {r['epic_count']:>6} {r['story_count']:>8}"
+            )
             total_reqs += r["requirements_count"]
             total_ambig += r["ambiguity_count"]
             total_epics += r["epic_count"]

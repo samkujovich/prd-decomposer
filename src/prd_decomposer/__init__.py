@@ -1,8 +1,8 @@
 from prd_decomposer.models import (
-    Requirement,
-    StructuredRequirements,
-    Story,
     Epic,
+    Requirement,
+    Story,
+    StructuredRequirements,
     TicketCollection,
 )
 from prd_decomposer.prompts import (
@@ -16,14 +16,12 @@ from prd_decomposer.prompts import (
 # server.py is run as __main__. Import from prd_decomposer.server directly.
 
 __all__ = [
-    # Models
-    "Requirement",
-    "StructuredRequirements",
-    "Story",
-    "Epic",
-    "TicketCollection",
-    # Prompts
     "ANALYZE_PRD_PROMPT",
     "DECOMPOSE_TO_TICKETS_PROMPT",
     "PROMPT_VERSION",
+    "Epic",
+    "Requirement",
+    "Story",
+    "StructuredRequirements",
+    "TicketCollection",
 ]

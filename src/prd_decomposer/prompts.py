@@ -3,7 +3,7 @@
 # Version for traceability - increment when prompts change
 PROMPT_VERSION = "1.0.0"
 
-ANALYZE_PRD_PROMPT = '''You are a senior technical product manager. Analyze the following PRD and extract structured requirements.
+ANALYZE_PRD_PROMPT = """You are a senior technical product manager. Analyze the following PRD and extract structured requirements.
 
 For each requirement you identify:
 1. Assign a unique ID (REQ-001, REQ-002, etc.)
@@ -33,10 +33,10 @@ Return valid JSON matching this exact schema:
   ],
   "summary": "Brief 1-2 sentence overview of the PRD",
   "source_hash": "Use first 8 chars of a hash of the PRD text"
-}}'''
+}}"""
 
 
-DECOMPOSE_TO_TICKETS_PROMPT = '''You are a senior engineering manager. Convert these structured requirements into Jira-ready epics and stories.
+DECOMPOSE_TO_TICKETS_PROMPT = """You are a senior engineering manager. Convert these structured requirements into Jira-ready epics and stories.
 
 Guidelines:
 1. Group related requirements into epics (1-4 epics typically)
@@ -77,4 +77,4 @@ Return valid JSON matching this exact schema:
     "requirement_count": number,
     "story_count": number
   }}
-}}'''
+}}"""

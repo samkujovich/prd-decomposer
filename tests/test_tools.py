@@ -19,7 +19,7 @@ def test_requirement_model_valid():
         acceptance_criteria=["Login form exists", "JWT issued on success"],
         dependencies=[],
         ambiguity_flags=[],
-        priority="high"
+        priority="high",
     )
     assert req.id == "REQ-001"
     assert req.priority == "high"
@@ -36,7 +36,7 @@ def test_requirement_invalid_priority():
             acceptance_criteria=[],
             dependencies=[],
             ambiguity_flags=[],
-            priority="critical"  # Invalid - must be high/medium/low
+            priority="critical",  # Invalid - must be high/medium/low
         )
 
 
@@ -49,13 +49,11 @@ def test_structured_requirements_model():
         acceptance_criteria=["AC1"],
         dependencies=[],
         ambiguity_flags=[],
-        priority="medium"
+        priority="medium",
     )
 
     structured = StructuredRequirements(
-        requirements=[req],
-        summary="Test PRD summary",
-        source_hash="abc123"
+        requirements=[req], summary="Test PRD summary", source_hash="abc123"
     )
 
     assert len(structured.requirements) == 1
@@ -71,14 +69,10 @@ def test_structured_requirements_serialization():
         acceptance_criteria=[],
         dependencies=[],
         ambiguity_flags=["Missing metrics"],
-        priority="low"
+        priority="low",
     )
 
-    original = StructuredRequirements(
-        requirements=[req],
-        summary="Summary",
-        source_hash="hash123"
-    )
+    original = StructuredRequirements(requirements=[req], summary="Summary", source_hash="hash123")
 
     # Round-trip through JSON
     json_str = original.model_dump_json()
@@ -96,7 +90,7 @@ def test_story_model_valid():
         acceptance_criteria=["Returns JWT on success", "Returns 401 on failure"],
         size="M",
         labels=["backend", "auth"],
-        requirement_ids=["REQ-001"]
+        requirement_ids=["REQ-001"],
     )
     assert story.size == "M"
     assert "backend" in story.labels
@@ -111,7 +105,7 @@ def test_story_invalid_size():
             acceptance_criteria=[],
             size="XL",  # Invalid - must be S/M/L
             labels=[],
-            requirement_ids=[]
+            requirement_ids=[],
         )
 
 
@@ -123,14 +117,14 @@ def test_epic_model_with_stories():
         acceptance_criteria=[],
         size="S",
         labels=[],
-        requirement_ids=["REQ-001"]
+        requirement_ids=["REQ-001"],
     )
 
     epic = Epic(
         title="Authentication Epic",
         description="All auth-related work",
         stories=[story],
-        labels=["auth"]
+        labels=["auth"],
     )
 
     assert len(epic.stories) == 1
@@ -145,18 +139,12 @@ def test_ticket_collection_model():
         acceptance_criteria=[],
         size="S",
         labels=[],
-        requirement_ids=[]
+        requirement_ids=[],
     )
-    epic = Epic(
-        title="Epic",
-        description="Desc",
-        stories=[story],
-        labels=[]
-    )
+    epic = Epic(title="Epic", description="Desc", stories=[story], labels=[])
 
     collection = TicketCollection(
-        epics=[epic],
-        metadata={"generated_at": "2026-02-14", "model": "gpt-4o"}
+        epics=[epic], metadata={"generated_at": "2026-02-14", "model": "gpt-4o"}
     )
 
     assert len(collection.epics) == 1
@@ -171,7 +159,7 @@ def test_ticket_collection_serialization():
         acceptance_criteria=["AC1"],
         size="L",
         labels=["backend"],
-        requirement_ids=["REQ-001"]
+        requirement_ids=["REQ-001"],
     )
     epic = Epic(title="Epic", description="Desc", stories=[story], labels=["auth"])
     original = TicketCollection(epics=[epic], metadata={"version": "1.0"})
