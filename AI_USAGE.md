@@ -6,6 +6,8 @@ This document tracks AI tool usage during development of prd-decomposer.
 
 - **Claude Code** (Anthropic): Project planning, code generation, code review, security hardening
 - **GPT-4o** (OpenAI): Runtime LLM for PRD analysis and ticket decomposition
+- **[Excalidraw Plugin for Claude Code](https://github.com/pwood16/claude-kit/tree/main/plugins/excalidraw)**: Architecture diagram generation
+- **[Agentic Code Reviewer](https://github.com/richhaase/agentic-code-reviewer/blob/main/CLAUDE.md)**: Code review methodology and principal engineer feedback patterns
 
 ## AI-Generated vs Human-Written
 
@@ -18,6 +20,7 @@ This document tracks AI tool usage during development of prd-decomposer.
 - `tests/test_prompts.py` - Prompt template tests
 - `tests/test_config.py` - Configuration validation tests
 - `evals/eval_prd_tools.py` - Arcade eval suite (8 eval cases)
+- `docs/diagrams/architecture.*` - Architecture diagram (Excalidraw + SVG)
 - `README.md` - Documentation
 
 ### Human-Written with AI Assistance
