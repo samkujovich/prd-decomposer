@@ -2,7 +2,6 @@
 
 **Date:** 2026-02-14
 **Status:** Approved
-**Context:** Take-home project for Arcade.dev Engineering Manager interview
 
 ## Overview
 

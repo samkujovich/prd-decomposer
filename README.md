@@ -2,7 +2,7 @@
 
 An MCP server that analyzes Product Requirements Documents (PRDs) and decomposes them into Jira-ready epics and stories.
 
-Built with [arcade-mcp](https://github.com/ArcadeAI/arcade-mcp) for the Arcade.dev Engineering Manager take-home project.
+Built with [arcade-mcp](https://github.com/ArcadeAI/arcade-mcp).
 
 ## Architecture
 
