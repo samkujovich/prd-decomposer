@@ -52,5 +52,52 @@ def analyze_prd(
     return validated.model_dump()
 
 
+@app.tool
+def decompose_to_tickets(
+    requirements: Annotated[dict, "Structured requirements from analyze_prd"]
+) -> dict:
+    """Convert structured requirements into Jira-compatible epics and stories.
+
+    Produces epics with child stories, acceptance criteria, t-shirt sizing (S/M/L),
+    and labels. Output is ready for Jira import.
+    """
+    # Validate input
+    validated_input = StructuredRequirements(**requirements)
+
+    # Call LLM
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "user",
+                "content": DECOMPOSE_TO_TICKETS_PROMPT.format(
+                    requirements_json=validated_input.model_dump_json(indent=2)
+                )
+            }
+        ],
+        response_format={"type": "json_object"},
+        temperature=0.3,
+    )
+
+    # Parse and validate response
+    data = json.loads(response.choices[0].message.content)
+
+    # Add metadata if not present
+    if "metadata" not in data:
+        data["metadata"] = {}
+    data["metadata"]["generated_at"] = datetime.now(timezone.utc).isoformat()
+    data["metadata"]["model"] = "gpt-4o"
+    data["metadata"]["requirement_count"] = len(validated_input.requirements)
+
+    # Count stories
+    story_count = sum(len(epic.get("stories", [])) for epic in data.get("epics", []))
+    data["metadata"]["story_count"] = story_count
+
+    # Validate with Pydantic
+    validated = TicketCollection(**data)
+
+    return validated.model_dump()
+
+
 if __name__ == "__main__":
     app.run()
