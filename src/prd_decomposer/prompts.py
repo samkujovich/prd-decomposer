@@ -82,6 +82,80 @@ Guidelines:
 5. Preserve traceability by including requirement_ids on each story
 6. Write clear acceptance criteria derived from the requirements
 
+## Example
+
+**Input Requirements:**
+{{
+  "requirements": [
+    {{
+      "id": "REQ-001",
+      "title": "Email-based password reset",
+      "description": "Users can request a password reset link sent to their email",
+      "acceptance_criteria": ["Reset email sent within 30 seconds", "Link expires after 1 hour"],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "high"
+    }}
+  ],
+  "summary": "Password reset feature"
+}}
+
+**Output:**
+{{
+  "epics": [
+    {{
+      "title": "Password Reset",
+      "description": "Enable users to securely reset their passwords via email",
+      "stories": [
+        {{
+          "title": "Create password reset request endpoint",
+          "description": "Implement POST /auth/reset-password endpoint that validates email and sends reset link",
+          "acceptance_criteria": [
+            "Endpoint accepts email in request body",
+            "Returns 200 for valid registered emails",
+            "Returns 200 for unregistered emails (prevent enumeration)",
+            "Triggers email send within 30 seconds"
+          ],
+          "size": "M",
+          "labels": ["backend", "api", "auth"],
+          "requirement_ids": ["REQ-001"]
+        }},
+        {{
+          "title": "Implement password reset email template",
+          "description": "Create email template with secure reset link and branding",
+          "acceptance_criteria": [
+            "Email contains secure one-time reset link",
+            "Link expires after 1 hour",
+            "Email follows brand guidelines"
+          ],
+          "size": "S",
+          "labels": ["backend", "email"],
+          "requirement_ids": ["REQ-001"]
+        }},
+        {{
+          "title": "Build password reset form UI",
+          "description": "Create frontend form for entering new password after clicking reset link",
+          "acceptance_criteria": [
+            "Form validates password strength",
+            "Shows success/error states",
+            "Redirects to login on success"
+          ],
+          "size": "M",
+          "labels": ["frontend", "auth"],
+          "requirement_ids": ["REQ-001"]
+        }}
+      ],
+      "labels": ["auth", "security"]
+    }}
+  ],
+  "metadata": {{
+    "requirement_count": 1,
+    "story_count": 3
+  }}
+}}
+
+---
+
 Requirements:
 {requirements_json}
 

@@ -54,3 +54,12 @@ def test_analyze_prd_prompt_has_example():
     assert "ambiguity_flags" in ANALYZE_PRD_PROMPT
     # Example should demonstrate ambiguity detection
     assert "Vague quantifier" in ANALYZE_PRD_PROMPT
+
+
+def test_decompose_to_tickets_prompt_has_example():
+    """Verify DECOMPOSE_TO_TICKETS_PROMPT contains a few-shot example."""
+    assert "## Example" in DECOMPOSE_TO_TICKETS_PROMPT
+    assert "epics" in DECOMPOSE_TO_TICKETS_PROMPT
+    assert "stories" in DECOMPOSE_TO_TICKETS_PROMPT
+    # Example should show sizing
+    assert '"size": "M"' in DECOMPOSE_TO_TICKETS_PROMPT or '"size": "S"' in DECOMPOSE_TO_TICKETS_PROMPT
