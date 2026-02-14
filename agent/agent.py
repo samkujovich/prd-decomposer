@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 
 from agents import Agent, Runner
-from agents.mcp import MCPServerStdio
+from agents.mcp import MCPServerStdio, MCPServerStdioParams
 
 
 async def main() -> None:
@@ -15,8 +15,10 @@ async def main() -> None:
 
     # Connect to MCP server via stdio
     async with MCPServerStdio(
-        command="uv",
-        args=["run", "python", str(server_path)]
+        params=MCPServerStdioParams(
+            command="uv",
+            args=["run", "python", str(server_path)]
+        )
     ) as mcp_server:
 
         agent = Agent(
@@ -24,7 +26,9 @@ async def main() -> None:
             instructions="""You help engineers convert Product Requirements Documents (PRDs) into actionable Jira tickets.
 
 Your workflow:
-1. Ask the user to provide their PRD text (they can paste it directly or you can read from a file path)
+1. Get the PRD content:
+   - If the user provides a file path, use the read_file tool to read it first
+   - If they paste text directly, use that
 2. Use the analyze_prd tool to extract structured requirements
 3. Review the results with the user:
    - Summarize the requirements found
@@ -33,6 +37,8 @@ Your workflow:
 4. Once confirmed, use decompose_to_tickets to generate Jira-ready epics and stories
 5. Present the ticket structure in a clear format
 6. Offer to export as JSON if needed
+
+IMPORTANT: When a user mentions a file path (like "samples/sample_prd.md" or any .md/.txt file), ALWAYS use the read_file tool first to get its contents, then pass that content to analyze_prd.
 
 Be conversational and helpful. Explain what you're doing at each step. If the PRD has ambiguities, help the user understand what additional information would improve the tickets.""",
             mcp_servers=[mcp_server],

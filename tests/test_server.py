@@ -7,7 +7,25 @@ import pytest
 from arcade_core.errors import FatalToolError
 from pydantic import ValidationError
 
-from prd_decomposer.server import analyze_prd, decompose_to_tickets, get_client
+from prd_decomposer.server import analyze_prd, decompose_to_tickets, get_client, read_file
+
+
+class TestReadFile:
+    """Tests for the read_file tool."""
+
+    def test_read_file_returns_content(self, tmp_path):
+        """Verify read_file returns file contents."""
+        test_file = tmp_path / "test.md"
+        test_file.write_text("# Test PRD\n\nThis is a test.")
+
+        result = read_file(str(test_file))
+
+        assert result == "# Test PRD\n\nThis is a test."
+
+    def test_read_file_nonexistent_raises_error(self):
+        """Verify read_file raises FatalToolError for missing files."""
+        with pytest.raises(FatalToolError):
+            read_file("/nonexistent/path/to/file.md")
 
 
 class TestGetClient:

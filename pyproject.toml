@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "arcade-mcp",
     "openai>=1.0.0",
+    "openai-agents>=0.0.17",
     "pydantic>=2.0.0",
 ]
 

@@ -3,6 +3,7 @@
 import hashlib
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Annotated
 
 from arcade_mcp_server import MCPApp
@@ -15,6 +16,20 @@ app = MCPApp(name="prd_decomposer", version="1.0.0")
 
 # Lazy client initialization to avoid requiring API key at import time
 _client = None
+
+
+@app.tool
+def read_file(
+    file_path: Annotated[str, "Path to the file to read (relative or absolute)"]
+) -> str:
+    """Read a file from the filesystem and return its contents.
+
+    Use this to read PRD files before passing their content to analyze_prd.
+    """
+    path = Path(file_path)
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {file_path}")
+    return path.read_text(encoding="utf-8")
 
 
 def get_client() -> OpenAI:
