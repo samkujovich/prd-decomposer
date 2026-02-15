@@ -1,6 +1,12 @@
 """Tests for agent command parsing and session state."""
 
 from agent.agent import extract_requirements_from_output, handle_command, parse_command
+from agent.formatters import (
+    format_analysis_summary,
+    format_requirements_table,
+    format_ticket_summary,
+    format_tickets_hierarchy,
+)
 from agent.session_state import SessionState
 
 
@@ -272,3 +278,124 @@ class TestHandleCommand:
 
         result = handle_command("clarify", 1, "under 200ms", session)
         assert "Added clarification to REQ-001" in result
+
+
+class TestFormatters:
+    """Tests for output formatters."""
+
+    def test_format_requirements_table(self):
+        """Format requirements as markdown table."""
+        requirements = {
+            "requirements": [
+                {"id": "REQ-001", "title": "User login", "priority": "high", "ambiguity_flags": [{"category": "vague"}]},
+                {"id": "REQ-002", "title": "Dashboard", "priority": "medium", "ambiguity_flags": []},
+            ]
+        }
+        result = format_requirements_table(requirements)
+
+        assert "## Requirements" in result
+        assert "| REQ-001 |" in result
+        assert "| REQ-002 |" in result
+        assert "| high |" in result
+        assert "| 1 |" in result  # ambiguity count
+        assert "| - |" in result  # no ambiguities
+
+    def test_format_requirements_table_empty(self):
+        """Format empty requirements."""
+        result = format_requirements_table({"requirements": []})
+        assert "No requirements found" in result
+
+    def test_format_tickets_hierarchy(self):
+        """Format tickets as tree hierarchy."""
+        tickets = {
+            "epics": [
+                {
+                    "title": "Authentication",
+                    "stories": [
+                        {"title": "Login form", "size": "S"},
+                        {"title": "Password reset", "size": "M"},
+                    ],
+                },
+                {
+                    "title": "Dashboard",
+                    "stories": [
+                        {"title": "Charts", "size": "L"},
+                    ],
+                },
+            ]
+        }
+        result = format_tickets_hierarchy(tickets)
+
+        assert "## Tickets" in result
+        assert "📦 **Authentication**" in result
+        assert "📦 **Dashboard**" in result
+        assert "🟢 [S] Login form" in result
+        assert "🟡 [M] Password reset" in result
+        assert "🔴 [L] Charts" in result
+        assert "2 epic(s)" in result
+        assert "3 story(ies)" in result
+
+    def test_format_tickets_hierarchy_empty(self):
+        """Format empty tickets."""
+        result = format_tickets_hierarchy({"epics": []})
+        assert "No tickets generated" in result
+
+    def test_format_analysis_summary(self):
+        """Format analysis summary with ambiguity counts."""
+        requirements = {
+            "requirements": [
+                {
+                    "id": "REQ-001",
+                    "ambiguity_flags": [
+                        {"severity": "critical"},
+                        {"severity": "warning"},
+                    ],
+                },
+                {
+                    "id": "REQ-002",
+                    "ambiguity_flags": [
+                        {"severity": "suggestion"},
+                    ],
+                },
+            ]
+        }
+        result = format_analysis_summary(requirements)
+
+        assert "## Analysis Complete" in result
+        assert "2 requirement(s)" in result
+        assert "3 ambiguity(ies)" in result
+        assert "🔴 1 critical" in result
+        assert "🟡 1 warning" in result
+        assert "💡 1 suggestion" in result
+
+    def test_format_analysis_summary_no_ambiguities(self):
+        """Format analysis summary with no ambiguities."""
+        requirements = {
+            "requirements": [{"id": "REQ-001", "ambiguity_flags": []}]
+        }
+        result = format_analysis_summary(requirements)
+
+        assert "✅ No ambiguities detected" in result
+
+    def test_format_ticket_summary(self):
+        """Format ticket summary with size breakdown."""
+        tickets = {
+            "epics": [
+                {
+                    "title": "Epic 1",
+                    "stories": [
+                        {"title": "S1", "size": "S"},
+                        {"title": "S2", "size": "S"},
+                        {"title": "S3", "size": "M"},
+                    ],
+                }
+            ]
+        }
+        result = format_ticket_summary(tickets)
+
+        assert "## Decomposition Complete" in result
+        assert "1 epic(s)" in result
+        assert "3 story(ies)" in result
+        assert "🟢 2 Small" in result
+        assert "🟡 1 Medium" in result
+        assert "🔴 0 Large" in result
