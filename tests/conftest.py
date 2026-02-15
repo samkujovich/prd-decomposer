@@ -7,7 +7,7 @@ import pytest
 
 import prd_decomposer.config as config_module
 import prd_decomposer.server as server_module
-from prd_decomposer.logging import correlation_id
+from prd_decomposer.log import correlation_id
 from prd_decomposer.server import RateLimiter
 
 

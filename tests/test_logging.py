@@ -4,7 +4,7 @@ import json
 import logging
 
 from prd_decomposer.config import Settings
-from prd_decomposer.logging import (
+from prd_decomposer.log import (
     StructuredFormatter,
     correlation_id,
     setup_logging,

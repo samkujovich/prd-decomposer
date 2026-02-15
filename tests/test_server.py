@@ -13,7 +13,7 @@ from arcade_core.errors import FatalToolError
 from openai import APIConnectionError, APIError, APITimeoutError, RateLimitError
 
 from prd_decomposer.config import Settings
-from prd_decomposer.logging import correlation_id
+from prd_decomposer.log import correlation_id
 from prd_decomposer.prompts import PROMPT_VERSION
 from prd_decomposer.server import (
     LLMError,
@@ -1017,7 +1017,7 @@ class TestCallLLMEdgeCases:
         assert usage == {}
 
     def test_call_llm_with_retry_exponential_backoff_delays(self, permissive_rate_limiter):
-        """Verify retry sleep delays follow exponential backoff pattern."""
+        """Verify retry sleep delays follow exponential backoff with jitter."""
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = RateLimitError(
             message="Rate limit", response=MagicMock(status_code=429), body=None
@@ -1036,7 +1036,10 @@ class TestCallLLMEdgeCases:
 
         assert mock_sleep.call_count == 3
         delays = [call.args[0] for call in mock_sleep.call_args_list]
-        assert delays == [1.0, 2.0, 4.0]
+        # Jitter: delay = base_delay * (0.5 + random()), so range is [0.5x, 1.5x]
+        base_delays = [1.0, 2.0, 4.0]
+        for actual, base in zip(delays, base_delays):
+            assert base * 0.5 <= actual <= base * 1.5
 
 
 class TestReadFileUTF8:

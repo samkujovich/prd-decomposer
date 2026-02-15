@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+import random
 import threading
 import time
 import uuid
@@ -228,7 +229,8 @@ def _call_llm_with_retry(
         except RateLimitError as e:
             last_error = e
             if attempt < settings.max_retries - 1:
-                delay = settings.initial_retry_delay * (2**attempt)
+                base_delay = settings.initial_retry_delay * (2**attempt)
+                delay = base_delay * (0.5 + random.random())  # Jitter: 0.5x to 1.5x
                 logger.warning(
                     "Retrying LLM call (attempt %d/%d) after RateLimitError, delay=%.1fs",
                     attempt + 1, settings.max_retries, delay,
@@ -238,7 +240,8 @@ def _call_llm_with_retry(
         except APIConnectionError as e:
             last_error = e
             if attempt < settings.max_retries - 1:
-                delay = settings.initial_retry_delay * (2**attempt)
+                base_delay = settings.initial_retry_delay * (2**attempt)
+                delay = base_delay * (0.5 + random.random())  # Jitter: 0.5x to 1.5x
                 logger.warning(
                     "Retrying LLM call (attempt %d/%d) after APIConnectionError, delay=%.1fs",
                     attempt + 1, settings.max_retries, delay,
@@ -248,7 +251,8 @@ def _call_llm_with_retry(
         except APITimeoutError as e:
             last_error = e
             if attempt < settings.max_retries - 1:
-                delay = settings.initial_retry_delay * (2**attempt)
+                base_delay = settings.initial_retry_delay * (2**attempt)
+                delay = base_delay * (0.5 + random.random())  # Jitter: 0.5x to 1.5x
                 logger.warning(
                     "Retrying LLM call (attempt %d/%d) after APITimeoutError, delay=%.1fs",
                     attempt + 1, settings.max_retries, delay,
@@ -262,7 +266,8 @@ def _call_llm_with_retry(
                 raise LLMError(f"OpenAI API error: {e}")
             last_error = e
             if attempt < settings.max_retries - 1:
-                delay = settings.initial_retry_delay * (2**attempt)
+                base_delay = settings.initial_retry_delay * (2**attempt)
+                delay = base_delay * (0.5 + random.random())  # Jitter: 0.5x to 1.5x
                 logger.warning(
                     "Retrying LLM call (attempt %d/%d) after APIError, delay=%.1fs",
                     attempt + 1, settings.max_retries, delay,

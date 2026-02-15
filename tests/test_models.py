@@ -151,10 +151,10 @@ def test_ticket_collection_model():
     assert collection.metadata["model"] == "gpt-4o"
 
 
-def test_requirement_empty_id_accepted():
-    """Document that empty string IDs are accepted (no min_length constraint)."""
-    req = Requirement(id="", title="T", description="D", priority="high")
-    assert req.id == ""
+def test_requirement_empty_id_rejected():
+    """Verify empty string IDs are rejected by min_length constraint."""
+    with pytest.raises(ValidationError):
+        Requirement(id="", title="T", description="D", priority="high")
 
 
 def test_structured_requirements_empty_list_accepted():
