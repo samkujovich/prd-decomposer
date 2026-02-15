@@ -147,12 +147,38 @@ def _export_to_jira(tickets: TicketCollection, project_key: str) -> str:
 
         # Create story issues
         for story in epic.stories:
-            # Build description with acceptance criteria
+            # Build description with acceptance criteria and agent context
             description_parts = [story.description]
             if story.acceptance_criteria:
                 description_parts.append("\n\nAcceptance Criteria:")
                 for ac in story.acceptance_criteria:
                     description_parts.append(f"- {ac}")
+
+            # Add agent context for AI-assisted implementation
+            if story.agent_context:
+                ctx = story.agent_context
+                description_parts.append("\n\n---\n\nAI Implementation Context:")
+                description_parts.append(f"\nGoal: {ctx.goal}")
+                if ctx.exploration_paths:
+                    description_parts.append(
+                        f"\nExploration paths: {', '.join(ctx.exploration_paths)}"
+                    )
+                if ctx.exploration_hints:
+                    description_parts.append(
+                        f"\nStart with: {', '.join(ctx.exploration_hints)}"
+                    )
+                if ctx.known_patterns:
+                    description_parts.append(
+                        f"\nPatterns to follow: {', '.join(ctx.known_patterns)}"
+                    )
+                if ctx.verification_tests:
+                    description_parts.append(
+                        f"\nVerification tests: {', '.join(ctx.verification_tests)}"
+                    )
+                if ctx.self_check:
+                    description_parts.append("\nSelf-check questions:")
+                    for question in ctx.self_check:
+                        description_parts.append(f"  - {question}")
 
             story_issue = {
                 "fields": {
@@ -200,7 +226,7 @@ def _export_to_yaml(tickets: TicketCollection) -> str:
         }
 
         for story in epic.stories:
-            story_dict = {
+            story_dict: dict[str, Any] = {
                 "title": story.title,
                 "description": story.description,
                 "size": story.size,
@@ -209,6 +235,9 @@ def _export_to_yaml(tickets: TicketCollection) -> str:
                 "requirement_ids": story.requirement_ids,
                 "acceptance_criteria": story.acceptance_criteria,
             }
+            # Include agent_context for AI-assisted implementation
+            if story.agent_context:
+                story_dict["agent_context"] = story.agent_context.model_dump()
             epic_dict["stories"].append(story_dict)
 
         output["epics"].append(epic_dict)
