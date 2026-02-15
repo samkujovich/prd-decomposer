@@ -33,10 +33,10 @@ ENV PYTHONUNBUFFERED=1
 # Default to stdio transport (can be overridden to "http")
 ENV MCP_TRANSPORT="stdio"
 
-# Health check (for HTTP mode)
-# In stdio mode, this will fail but container orchestrators can disable it
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "from prd_decomposer.server import health_check; import json; result = health_check(); exit(0 if result['status'] == 'healthy' else 1)" || exit 0
+# Health check disabled by default (stdio mode doesn't support HTTP probes)
+# For HTTP mode deployments, override with:
+#   HEALTHCHECK CMD python -c "from prd_decomposer.server import health_check; result = health_check(); exit(0 if result['status'] == 'healthy' else 1)"
+HEALTHCHECK NONE
 
 # Run the MCP server
 ENTRYPOINT ["python", "-m", "prd_decomposer.server"]
