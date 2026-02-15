@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  prd-decomposer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PRD_OPENAI_MODEL=${PRD_OPENAI_MODEL:-gpt-4o}
+      - PRD_MAX_RETRIES=${PRD_MAX_RETRIES:-3}
+      - PRD_LLM_TIMEOUT=${PRD_LLM_TIMEOUT:-60}
+      - PRD_LOG_LEVEL=${PRD_LOG_LEVEL:-INFO}
+      - PRD_LOG_FORMAT=${PRD_LOG_FORMAT:-json}
+    volumes:
+      # Mount samples for processing
+      - ./samples:/app/samples:ro
+      # Mount outputs directory for results
+      - ./outputs:/app/outputs
+    # For stdio mode (default), use stdin_open and tty
+    stdin_open: true
+    tty: true
+    # Graceful shutdown timeout
+    stop_grace_period: 65s  # Slightly longer than LLM timeout
+
+  # Optional: HTTP mode for network access
+  prd-decomposer-http:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-m", "prd_decomposer.server", "http"]
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PRD_OPENAI_MODEL=${PRD_OPENAI_MODEL:-gpt-4o}
+      - PRD_LOG_LEVEL=${PRD_LOG_LEVEL:-INFO}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "from prd_decomposer.server import health_check; result = health_check(); exit(0 if result['status'] == 'healthy' else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    profiles:
+      - http  # Only start with: docker-compose --profile http up

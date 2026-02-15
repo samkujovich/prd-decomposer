@@ -2,7 +2,6 @@
 
 import prd_decomposer
 
-
 EXPECTED_EXPORTS = {
     "ANALYZE_PRD_PROMPT",
     "DECOMPOSE_TO_TICKETS_PROMPT",

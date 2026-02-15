@@ -1,9 +1,11 @@
 """MCP server for PRD analysis and decomposition."""
 
+import atexit
 import hashlib
 import json
 import logging
 import random
+import signal
 import threading
 import time
 import uuid
@@ -16,7 +18,7 @@ from openai import APIConnectionError, APIError, APITimeoutError, OpenAI, RateLi
 from pydantic import ValidationError
 
 from prd_decomposer.config import Settings, get_settings
-from prd_decomposer.logging import correlation_id
+from prd_decomposer.log import correlation_id
 from prd_decomposer.models import StructuredRequirements, TicketCollection
 from prd_decomposer.prompts import (
     ANALYZE_PRD_PROMPT,
@@ -39,6 +41,40 @@ _client_lock = threading.Lock()
 ALLOWED_DIRECTORIES: list[Path] = [
     Path.cwd().resolve(),
 ]
+
+# Graceful shutdown handling
+_shutdown_event = threading.Event()
+
+
+def _shutdown_handler(signum: int, frame: object) -> None:
+    """Handle shutdown signals gracefully."""
+    sig_name = signal.Signals(signum).name
+    logger.info("Received %s, initiating graceful shutdown...", sig_name)
+    _shutdown_event.set()
+
+
+def _cleanup() -> None:
+    """Cleanup resources on exit."""
+    try:
+        logger.info("Cleaning up resources...")
+    except (ValueError, OSError):
+        # Log stream may be closed during interpreter shutdown
+        pass
+    # Reset global singletons
+    global _client, _rate_limiter
+    _client = None
+    _rate_limiter = None
+
+
+# Register signal handlers and cleanup
+signal.signal(signal.SIGTERM, _shutdown_handler)
+signal.signal(signal.SIGINT, _shutdown_handler)
+atexit.register(_cleanup)
+
+
+def is_shutting_down() -> bool:
+    """Check if server is shutting down. Use to abort long-running operations."""
+    return _shutdown_event.is_set()
 
 
 class LLMError(Exception):
@@ -195,6 +231,10 @@ def _call_llm_with_retry(
     last_error: Exception | None = None
 
     for attempt in range(settings.max_retries):
+        # Check for shutdown before attempting LLM call
+        if is_shutting_down():
+            raise LLMError("Server is shutting down, aborting LLM call")
+
         try:
             response = client.chat.completions.create(  # type: ignore[call-overload]
                 model=settings.openai_model,
@@ -479,6 +519,69 @@ def decompose_to_tickets(
     Pass the complete JSON output from analyze_prd as a string.
     """
     return _decompose_to_tickets_impl(requirements_json)
+
+
+@app.tool
+def health_check() -> dict:
+    """Check service health and OpenAI API connectivity.
+
+    Returns status information including:
+    - Service status (healthy/degraded/unhealthy)
+    - OpenAI API connectivity
+    - Configuration summary
+    - Rate limiter status
+
+    Use this to verify the service is operational before processing PRDs.
+    """
+    settings = get_settings()
+    status = "healthy"
+    checks: dict[str, dict] = {}
+
+    # Check OpenAI API connectivity
+    try:
+        client = get_client()
+        # Make a minimal API call to verify connectivity
+        response = client.models.list()
+        checks["openai_api"] = {
+            "status": "connected",
+            "models_available": len(response.data) if response.data else 0,
+        }
+    except Exception as e:
+        status = "unhealthy"
+        checks["openai_api"] = {
+            "status": "error",
+            "error": str(e),
+        }
+
+    # Check rate limiter status
+    try:
+        rate_limiter = get_rate_limiter(settings)
+        with rate_limiter._lock:
+            current_calls = len(rate_limiter._calls)
+        checks["rate_limiter"] = {
+            "status": "ok",
+            "current_calls": current_calls,
+            "max_calls": rate_limiter.max_calls,
+            "window_seconds": rate_limiter.window_seconds,
+        }
+    except Exception as e:
+        status = "degraded" if status == "healthy" else status
+        checks["rate_limiter"] = {
+            "status": "error",
+            "error": str(e),
+        }
+
+    return {
+        "status": status,
+        "checks": checks,
+        "config": {
+            "model": settings.openai_model,
+            "max_retries": settings.max_retries,
+            "llm_timeout": settings.llm_timeout,
+            "max_prd_length": settings.max_prd_length,
+        },
+        "version": PROMPT_VERSION,
+    }
 
 
 if __name__ == "__main__":

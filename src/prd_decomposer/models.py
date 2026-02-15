@@ -1,14 +1,14 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class Requirement(BaseModel):
     """A single requirement extracted from a PRD."""
 
-    id: str = Field(..., description="Unique identifier (e.g., REQ-001)")
-    title: str = Field(..., description="Short title of the requirement")
-    description: str = Field(..., description="Detailed description")
+    id: str = Field(..., min_length=1, description="Unique identifier (e.g., REQ-001)")
+    title: str = Field(..., min_length=1, description="Short title of the requirement")
+    description: str = Field(..., min_length=1, description="Detailed description")
     acceptance_criteria: list[str] = Field(
         default_factory=list, description="Testable acceptance criteria"
     )
@@ -25,19 +25,34 @@ class StructuredRequirements(BaseModel):
     """Collection of requirements extracted from a PRD."""
 
     requirements: list[Requirement] = Field(..., description="List of extracted requirements")
-    summary: str = Field(..., description="Brief overview of the PRD")
-    source_hash: str = Field(..., description="Hash of source PRD for traceability")
+    summary: str = Field(..., min_length=1, description="Brief overview of the PRD")
+    source_hash: str = Field(..., min_length=1, description="Hash of source PRD for traceability")
+
+    @model_validator(mode="after")
+    def validate_dependencies(self) -> "StructuredRequirements":
+        """Ensure all dependency IDs reference existing requirements."""
+        valid_ids = {req.id for req in self.requirements}
+        for req in self.requirements:
+            for dep_id in req.dependencies:
+                if dep_id not in valid_ids:
+                    raise ValueError(
+                        f"Requirement {req.id} depends on non-existent requirement {dep_id}"
+                    )
+        return self
 
 
 class Story(BaseModel):
     """A Jira-compatible story."""
 
-    title: str = Field(..., description="Story title")
-    description: str = Field(..., description="Story description")
+    title: str = Field(..., min_length=1, description="Story title")
+    description: str = Field(..., min_length=1, description="Story description")
     acceptance_criteria: list[str] = Field(
         default_factory=list, description="Acceptance criteria for the story"
     )
     size: Literal["S", "M", "L"] = Field(..., description="T-shirt size estimate")
+    priority: Literal["high", "medium", "low"] = Field(
+        default="medium", description="Story priority"
+    )
     labels: list[str] = Field(default_factory=list, description="Labels/tags")
     requirement_ids: list[str] = Field(
         default_factory=list, description="IDs of source requirements for traceability"
@@ -47,8 +62,8 @@ class Story(BaseModel):
 class Epic(BaseModel):
     """A Jira-compatible epic containing stories."""
 
-    title: str = Field(..., description="Epic title")
-    description: str = Field(..., description="Epic description")
+    title: str = Field(..., min_length=1, description="Epic title")
+    description: str = Field(..., min_length=1, description="Epic description")
     stories: list[Story] = Field(default_factory=list, description="Child stories")
     labels: list[str] = Field(default_factory=list, description="Labels/tags")
 

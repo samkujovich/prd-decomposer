@@ -100,7 +100,7 @@ class TestStructuredFormatter:
         assert parsed["message"] == "Error occurred"
         assert parsed["level"] == "ERROR"
 
-    def test_json_format_handles_getMessage_failure(self):
+    def test_json_format_handles_get_message_failure(self):
         """Verify formatter returns valid JSON when getMessage() raises."""
         formatter = StructuredFormatter()
         record = logging.LogRecord(

@@ -1,7 +1,7 @@
 """Prompt templates for PRD analysis and decomposition."""
 
 # Version for traceability - increment when prompts change
-PROMPT_VERSION = "1.2.0"
+PROMPT_VERSION = "1.3.0"
 
 ANALYZE_PRD_PROMPT = """You are a senior technical product manager. Analyze the following PRD and extract structured requirements.
 
@@ -81,9 +81,10 @@ Guidelines:
    - S (Small): Less than 1 day, single component, low risk
    - M (Medium): 1-3 days, may touch multiple components, moderate complexity
    - L (Large): 3-5 days, significant complexity, unknowns, or cross-team coordination
-4. Generate descriptive labels (e.g., "backend", "frontend", "api", "database", "auth", "testing")
-5. Preserve traceability by including requirement_ids on each story
-6. Write clear acceptance criteria derived from the requirements
+4. Set story priority based on source requirement priority ("high", "medium", "low")
+5. Generate descriptive labels (e.g., "backend", "frontend", "api", "database", "auth", "testing")
+6. Preserve traceability by including requirement_ids on each story
+7. Write clear acceptance criteria derived from the requirements
 
 ## Example
 
@@ -120,6 +121,7 @@ Guidelines:
             "Triggers email send within 30 seconds"
           ],
           "size": "M",
+          "priority": "high",
           "labels": ["backend", "api", "auth"],
           "requirement_ids": ["REQ-001"]
         }},
@@ -132,6 +134,7 @@ Guidelines:
             "Email follows brand guidelines"
           ],
           "size": "S",
+          "priority": "high",
           "labels": ["backend", "email"],
           "requirement_ids": ["REQ-001"]
         }},
@@ -144,6 +147,7 @@ Guidelines:
             "Redirects to login on success"
           ],
           "size": "M",
+          "priority": "high",
           "labels": ["frontend", "auth"],
           "requirement_ids": ["REQ-001"]
         }}
@@ -175,6 +179,7 @@ Return valid JSON matching this exact schema:
           "description": "string",
           "acceptance_criteria": ["string"],
           "size": "S|M|L",
+          "priority": "high|medium|low",
           "labels": ["string"],
           "requirement_ids": ["REQ-XXX"]
         }}

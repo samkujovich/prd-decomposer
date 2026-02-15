@@ -34,7 +34,7 @@ def process_prd(prd_path: Path, output_dir: Path) -> dict:
 
     # Decompose to tickets
     print("  Generating Jira tickets...")
-    tickets = decompose_to_tickets(requirements)
+    tickets = decompose_to_tickets(json.dumps(requirements))
     epic_count = len(tickets["epics"])
     story_count = tickets["metadata"]["story_count"]
     print(f"  Generated {epic_count} epics with {story_count} stories")

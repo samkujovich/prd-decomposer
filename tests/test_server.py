@@ -27,6 +27,7 @@ from prd_decomposer.server import (
     decompose_to_tickets,
     get_client,
     get_rate_limiter,
+    health_check,
     read_file,
 )
 
@@ -1081,15 +1082,8 @@ class TestGetRateLimiterThreadSafety:
 class TestMCPWrappers:
     """Tests for MCP tool wrapper functions (PE-4)."""
 
-    def test_analyze_prd_wrapper_delegates_to_impl(self, mock_client_factory):
+    def test_analyze_prd_wrapper_delegates_to_impl(self):
         """Verify analyze_prd delegates to _analyze_prd_impl."""
-        mock_response = {
-            "requirements": [],
-            "summary": "Test",
-            "source_hash": "ignored",
-        }
-        mock_client = mock_client_factory(mock_response)
-
         with patch("prd_decomposer.server._analyze_prd_impl") as mock_impl:
             mock_impl.return_value = {"requirements": [], "summary": "Test", "source_hash": "abc"}
             result = analyze_prd("Test PRD")
@@ -1167,3 +1161,61 @@ class TestMetadataTimestamps:
         ts = result["metadata"]["generated_at"]
         parsed = datetime.fromisoformat(ts)
         assert parsed is not None
+
+
+class TestHealthCheck:
+    """Tests for health_check tool."""
+
+    def test_health_check_returns_healthy_when_api_connected(self):
+        """Verify health_check returns healthy status when OpenAI API is connected."""
+        mock_client = MagicMock()
+        mock_client.models.list.return_value = MagicMock(data=[MagicMock(), MagicMock()])
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            result = health_check()
+
+        assert result["status"] == "healthy"
+        assert result["checks"]["openai_api"]["status"] == "connected"
+        assert result["checks"]["openai_api"]["models_available"] == 2
+        assert result["checks"]["rate_limiter"]["status"] == "ok"
+        assert "version" in result
+        assert "config" in result
+
+    def test_health_check_returns_unhealthy_when_api_fails(self):
+        """Verify health_check returns unhealthy status when OpenAI API fails."""
+        mock_client = MagicMock()
+        mock_client.models.list.side_effect = Exception("API connection failed")
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            result = health_check()
+
+        assert result["status"] == "unhealthy"
+        assert result["checks"]["openai_api"]["status"] == "error"
+        assert "API connection failed" in result["checks"]["openai_api"]["error"]
+
+    def test_health_check_includes_config_summary(self):
+        """Verify health_check returns configuration summary."""
+        mock_client = MagicMock()
+        mock_client.models.list.return_value = MagicMock(data=[])
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            result = health_check()
+
+        assert "config" in result
+        assert "model" in result["config"]
+        assert "max_retries" in result["config"]
+        assert "llm_timeout" in result["config"]
+        assert "max_prd_length" in result["config"]
+
+    def test_health_check_includes_rate_limiter_status(self):
+        """Verify health_check returns rate limiter status."""
+        mock_client = MagicMock()
+        mock_client.models.list.return_value = MagicMock(data=[])
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            result = health_check()
+
+        assert "rate_limiter" in result["checks"]
+        assert "current_calls" in result["checks"]["rate_limiter"]
+        assert "max_calls" in result["checks"]["rate_limiter"]
+        assert "window_seconds" in result["checks"]["rate_limiter"]
