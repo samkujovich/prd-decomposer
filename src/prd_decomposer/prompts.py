@@ -1,7 +1,7 @@
 """Prompt templates for PRD analysis and decomposition."""
 
 # Version for traceability - increment when prompts change
-PROMPT_VERSION = "1.1.0"
+PROMPT_VERSION = "1.2.0"
 
 ANALYZE_PRD_PROMPT = """You are a senior technical product manager. Analyze the following PRD and extract structured requirements.
 
@@ -49,7 +49,10 @@ The reset flow should be fast and user-friendly.
 ---
 
 Now analyze this PRD:
+
+<prd_document>
 {prd_text}
+</prd_document>
 
 Return valid JSON matching this exact schema:
 {{
@@ -156,8 +159,9 @@ Guidelines:
 
 ---
 
-Requirements:
+<requirements_document>
 {requirements_json}
+</requirements_document>
 
 Return valid JSON matching this exact schema:
 {{

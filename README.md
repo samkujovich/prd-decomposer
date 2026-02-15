@@ -54,6 +54,10 @@ Converts structured requirements into Jira-compatible tickets.
 ### Security
 - Path traversal protection restricts file access to working directory
 - Symlink resolution prevents bypass attacks
+- Input length limits prevent resource exhaustion (`PRD_MAX_PRD_LENGTH`)
+- XML delimiters in prompts help LLMs distinguish instructions from user content
+
+**Note on Prompt Injection:** Like all LLM-based tools, this system is susceptible to prompt injection attacks where malicious content in PRDs could attempt to manipulate LLM behavior. Mitigations include input length limits and structural delimiters, but these are not foolproof. Do not use with untrusted input in security-sensitive contexts.
 
 ### Reliability
 - Automatic retry with exponential backoff for rate limits and connection errors
@@ -71,6 +75,8 @@ Environment variables with `PRD_` prefix (via pydantic-settings):
 - `PRD_DECOMPOSE_TEMPERATURE` - Temperature for decomposition (default: `0.3`)
 - `PRD_MAX_RETRIES` - Max retry attempts, 1-10 (default: `3`)
 - `PRD_INITIAL_RETRY_DELAY` - Initial retry delay in seconds, 0-60 (default: `1.0`)
+- `PRD_LLM_TIMEOUT` - Timeout for LLM API calls in seconds, 1-300 (default: `60`)
+- `PRD_MAX_PRD_LENGTH` - Maximum PRD text length in characters, 1000-500000 (default: `100000`)
 
 ## Key Decisions
 

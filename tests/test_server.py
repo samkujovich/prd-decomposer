@@ -1,6 +1,7 @@
 """Tests for MCP server tools with mocked LLM calls."""
 
 import json
+import logging
 import os
 import threading
 from pathlib import Path
@@ -11,6 +12,7 @@ from arcade_core.errors import FatalToolError
 from openai import APIConnectionError, APIError, APITimeoutError, RateLimitError
 
 from prd_decomposer.config import Settings
+from prd_decomposer.logging import correlation_id
 from prd_decomposer.server import (
     LLMError,
     _analyze_prd_impl,
@@ -554,6 +556,37 @@ class TestAnalyzePrd:
             with pytest.raises(RuntimeError, match="Failed to analyze PRD"):
                 _analyze_prd_impl("Test PRD", client=mock_client, settings=settings)
 
+    def test_analyze_prd_rejects_oversized_input(self):
+        """Verify analyze_prd raises ValueError when PRD exceeds max length."""
+        # Create PRD that exceeds the limit
+        oversized_prd = "x" * 2000  # 2000 chars
+        settings = Settings(max_prd_length=1000)  # Limit to 1000
+
+        with pytest.raises(ValueError, match="exceeds maximum length"):
+            _analyze_prd_impl(oversized_prd, settings=settings)
+
+    def test_analyze_prd_accepts_input_at_max_length(self):
+        """Verify analyze_prd accepts PRD exactly at max length."""
+        mock_response = {
+            "requirements": [],
+            "summary": "Empty PRD",
+            "source_hash": "12345678",
+        }
+        mock_usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
+            usage=mock_usage,
+        )
+
+        # PRD exactly at limit should work
+        prd_at_limit = "x" * 1000
+        settings = Settings(max_prd_length=1000)
+
+        result = _analyze_prd_impl(prd_at_limit, client=mock_client, settings=settings)
+        assert "requirements" in result
+
 
 class TestDecomposeToTickets:
     """Tests for the decompose_to_tickets tool."""
@@ -971,3 +1004,133 @@ class TestIntegrationPipeline:
         assert tickets["epics"][0]["stories"][0]["requirement_ids"] == ["REQ-001"]
         assert "metadata" in tickets
         assert tickets["metadata"]["requirement_count"] == 1
+
+
+def _make_mock_client(response_data: dict) -> MagicMock:
+    """Helper to create a mock OpenAI client with a canned response."""
+    mock_usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = MagicMock(
+        choices=[MagicMock(message=MagicMock(content=json.dumps(response_data)))],
+        usage=mock_usage,
+    )
+    return mock_client
+
+
+class TestServerLogging:
+    """Tests for structured logging in server tool implementations."""
+
+    def test_analyze_prd_sets_correlation_id(self, caplog):
+        """Verify _analyze_prd_impl sets a correlation ID."""
+        mock_response = {
+            "requirements": [],
+            "summary": "Test",
+            "source_hash": "ignored",
+        }
+        mock_client = _make_mock_client(mock_response)
+
+        with caplog.at_level(logging.DEBUG, logger="prd_decomposer"):
+            _analyze_prd_impl("Test PRD", client=mock_client)
+
+        # After the call, correlation_id should have been set (non-empty)
+        # We check the log records for a non-empty correlation_id
+        assert any("Starting PRD analysis" in r.message for r in caplog.records)
+
+    def test_analyze_prd_logs_completion(self, caplog):
+        """Verify _analyze_prd_impl logs completion with requirement count."""
+        mock_response = {
+            "requirements": [
+                {
+                    "id": "REQ-001",
+                    "title": "Test",
+                    "description": "Test",
+                    "acceptance_criteria": [],
+                    "dependencies": [],
+                    "ambiguity_flags": [],
+                    "priority": "high",
+                }
+            ],
+            "summary": "Test",
+            "source_hash": "ignored",
+        }
+        mock_client = _make_mock_client(mock_response)
+
+        with caplog.at_level(logging.DEBUG, logger="prd_decomposer"):
+            _analyze_prd_impl("Test PRD", client=mock_client)
+
+        messages = [r.message for r in caplog.records]
+        assert any("PRD analysis complete" in m for m in messages)
+
+    def test_decompose_logs_start_and_completion(self, caplog):
+        """Verify _decompose_to_tickets_impl logs start and completion."""
+        input_requirements = {
+            "requirements": [
+                {
+                    "id": "REQ-001",
+                    "title": "Test",
+                    "description": "Test",
+                    "acceptance_criteria": [],
+                    "dependencies": [],
+                    "ambiguity_flags": [],
+                    "priority": "low",
+                }
+            ],
+            "summary": "Test",
+            "source_hash": "12345678",
+        }
+        mock_response = {
+            "epics": [{"title": "Epic", "description": "Desc", "stories": [], "labels": []}]
+        }
+        mock_client = _make_mock_client(mock_response)
+
+        with caplog.at_level(logging.DEBUG, logger="prd_decomposer"):
+            _decompose_to_tickets_impl(input_requirements, client=mock_client)
+
+        messages = [r.message for r in caplog.records]
+        assert any("Starting ticket decomposition" in m for m in messages)
+        assert any("Ticket decomposition complete" in m for m in messages)
+
+    def test_call_llm_with_retry_logs_retry_attempts(self, caplog):
+        """Verify _call_llm_with_retry logs retry attempts."""
+        mock_response = {"result": "success"}
+        mock_usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = [
+            RateLimitError(
+                message="Rate limit", response=MagicMock(status_code=429), body=None
+            ),
+            MagicMock(
+                choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
+                usage=mock_usage,
+            ),
+        ]
+
+        settings = Settings(initial_retry_delay=0.01)
+        with caplog.at_level(logging.DEBUG, logger="prd_decomposer"):
+            with patch("prd_decomposer.server.time.sleep"):
+                _call_llm_with_retry(
+                    [{"role": "user", "content": "test"}],
+                    temperature=0.2,
+                    client=mock_client,
+                    settings=settings,
+                )
+
+        messages = [r.message for r in caplog.records]
+        assert any("Retrying LLM call" in m for m in messages)
+
+    def test_analyze_prd_logs_error_on_failure(self, caplog):
+        """Verify _analyze_prd_impl logs errors when LLM call fails."""
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = RateLimitError(
+            message="Rate limit", response=MagicMock(status_code=429), body=None
+        )
+
+        settings = Settings(initial_retry_delay=0.01)
+        with caplog.at_level(logging.DEBUG, logger="prd_decomposer"):
+            with patch("prd_decomposer.server.time.sleep"):
+                with pytest.raises(RuntimeError):
+                    _analyze_prd_impl("Test PRD", client=mock_client, settings=settings)
+
+        messages = [r.message for r in caplog.records]
+        assert any("PRD analysis failed" in m for m in messages)

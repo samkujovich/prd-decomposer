@@ -86,6 +86,38 @@ class TestSettings:
         assert settings_min.initial_retry_delay == 0.001
         assert settings_max.initial_retry_delay == 60
 
+    def test_settings_has_default_log_level(self):
+        """Verify Settings has default log_level of INFO."""
+        settings = Settings()
+        assert settings.log_level == "INFO"
+
+    def test_settings_has_default_log_format(self):
+        """Verify Settings has default log_format of json."""
+        settings = Settings()
+        assert settings.log_format == "json"
+
+    def test_settings_log_level_from_env(self, monkeypatch):
+        """Verify log_level loads from PRD_LOG_LEVEL env var."""
+        monkeypatch.setenv("PRD_LOG_LEVEL", "DEBUG")
+        settings = Settings()
+        assert settings.log_level == "DEBUG"
+
+    def test_settings_log_format_from_env(self, monkeypatch):
+        """Verify log_format loads from PRD_LOG_FORMAT env var."""
+        monkeypatch.setenv("PRD_LOG_FORMAT", "text")
+        settings = Settings()
+        assert settings.log_format == "text"
+
+    def test_settings_log_level_rejects_invalid(self):
+        """Verify log_level rejects values outside allowed set."""
+        with pytest.raises(ValidationError):
+            Settings(log_level="VERBOSE")
+
+    def test_settings_log_format_rejects_invalid(self):
+        """Verify log_format rejects values outside allowed set."""
+        with pytest.raises(ValidationError):
+            Settings(log_format="yaml")
+
     def test_settings_has_default_llm_timeout(self):
         """Verify Settings has default llm_timeout of 60 seconds."""
         settings = Settings()
@@ -115,6 +147,34 @@ class TestSettings:
         settings_max = Settings(llm_timeout=300)
         assert settings_min.llm_timeout == 0.1
         assert settings_max.llm_timeout == 300
+
+    def test_settings_has_default_max_prd_length(self):
+        """Verify Settings has default max_prd_length of 100000."""
+        settings = Settings()
+        assert settings.max_prd_length == 100000
+
+    def test_settings_max_prd_length_from_env(self, monkeypatch):
+        """Verify max_prd_length loads from environment variable."""
+        monkeypatch.setenv("PRD_MAX_PRD_LENGTH", "50000")
+        settings = Settings()
+        assert settings.max_prd_length == 50000
+
+    def test_settings_max_prd_length_minimum_bound(self):
+        """Verify max_prd_length rejects values below 1000."""
+        with pytest.raises(ValidationError):
+            Settings(max_prd_length=999)
+
+    def test_settings_max_prd_length_maximum_bound(self):
+        """Verify max_prd_length rejects values above 500000."""
+        with pytest.raises(ValidationError):
+            Settings(max_prd_length=500001)
+
+    def test_settings_max_prd_length_valid_bounds(self):
+        """Verify max_prd_length accepts values within bounds."""
+        settings_min = Settings(max_prd_length=1000)
+        settings_max = Settings(max_prd_length=500000)
+        assert settings_min.max_prd_length == 1000
+        assert settings_max.max_prd_length == 500000
 
 
 class TestGetSettings:

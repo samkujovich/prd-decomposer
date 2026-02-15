@@ -2,8 +2,10 @@
 
 import hashlib
 import json
+import logging
 import threading
 import time
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -13,12 +15,15 @@ from openai import APIConnectionError, APIError, APITimeoutError, OpenAI, RateLi
 from pydantic import ValidationError
 
 from prd_decomposer.config import Settings, get_settings
+from prd_decomposer.logging import correlation_id
 from prd_decomposer.models import StructuredRequirements, TicketCollection
 from prd_decomposer.prompts import (
     ANALYZE_PRD_PROMPT,
     DECOMPOSE_TO_TICKETS_PROMPT,
     PROMPT_VERSION,
 )
+
+logger = logging.getLogger("prd_decomposer")
 
 app = MCPApp(name="prd_decomposer", version="1.0.0")
 
@@ -147,18 +152,30 @@ def _call_llm_with_retry(
             last_error = e
             if attempt < settings.max_retries - 1:
                 delay = settings.initial_retry_delay * (2**attempt)
+                logger.warning(
+                    "Retrying LLM call (attempt %d/%d) after RateLimitError, delay=%.1fs",
+                    attempt + 1, settings.max_retries, delay,
+                )
                 time.sleep(delay)
 
         except APIConnectionError as e:
             last_error = e
             if attempt < settings.max_retries - 1:
                 delay = settings.initial_retry_delay * (2**attempt)
+                logger.warning(
+                    "Retrying LLM call (attempt %d/%d) after APIConnectionError, delay=%.1fs",
+                    attempt + 1, settings.max_retries, delay,
+                )
                 time.sleep(delay)
 
         except APITimeoutError as e:
             last_error = e
             if attempt < settings.max_retries - 1:
                 delay = settings.initial_retry_delay * (2**attempt)
+                logger.warning(
+                    "Retrying LLM call (attempt %d/%d) after APITimeoutError, delay=%.1fs",
+                    attempt + 1, settings.max_retries, delay,
+                )
                 time.sleep(delay)
 
         except APIError as e:
@@ -169,6 +186,10 @@ def _call_llm_with_retry(
             last_error = e
             if attempt < settings.max_retries - 1:
                 delay = settings.initial_retry_delay * (2**attempt)
+                logger.warning(
+                    "Retrying LLM call (attempt %d/%d) after APIError, delay=%.1fs",
+                    attempt + 1, settings.max_retries, delay,
+                )
                 time.sleep(delay)
 
     raise LLMError(f"LLM call failed after {settings.max_retries} retries: {last_error}")
@@ -189,10 +210,24 @@ def _analyze_prd_impl(
     client = client or get_client()
     settings = settings or get_settings()
 
+    # Set correlation ID for this request
+    request_id = str(uuid.uuid4())[:8]
+    correlation_id.set(request_id)
+
+    logger.info("Starting PRD analysis, prd_length=%d", len(prd_text))
+
+    # Validate input length (prompt injection mitigation)
+    if len(prd_text) > settings.max_prd_length:
+        raise ValueError(
+            f"PRD text exceeds maximum length of {settings.max_prd_length} characters "
+            f"(got {len(prd_text)}). Set PRD_MAX_PRD_LENGTH to increase limit."
+        )
+
     # Generate source hash for traceability
     source_hash = hashlib.sha256(prd_text.encode()).hexdigest()[:8]
 
     # Call LLM with retry
+    start_time = time.monotonic()
     try:
         data, usage = _call_llm_with_retry(
             messages=[{"role": "user", "content": ANALYZE_PRD_PROMPT.format(prd_text=prd_text)}],
@@ -201,7 +236,11 @@ def _analyze_prd_impl(
             settings=settings,
         )
     except LLMError as e:
+        elapsed = time.monotonic() - start_time
+        logger.error("PRD analysis failed after %.2fs: %s", elapsed, e)
         raise RuntimeError(f"Failed to analyze PRD: {e}")
+
+    elapsed = time.monotonic() - start_time
 
     # Ensure source_hash is set
     data["source_hash"] = source_hash
@@ -221,6 +260,11 @@ def _analyze_prd_impl(
         "usage": usage,
         "analyzed_at": datetime.now(UTC).isoformat(),
     }
+
+    logger.info(
+        "PRD analysis complete, requirement_count=%d, elapsed=%.2fs, tokens=%s",
+        len(result["requirements"]), elapsed, usage.get("total_tokens", "N/A"),
+    )
 
     return result
 
@@ -253,6 +297,12 @@ def _decompose_to_tickets_impl(
     client = client or get_client()
     settings = settings or get_settings()
 
+    # Set correlation ID for this request
+    request_id = str(uuid.uuid4())[:8]
+    correlation_id.set(request_id)
+
+    logger.info("Starting ticket decomposition")
+
     # Check for None or empty input first
     if requirements is None or requirements == "":
         raise ValueError(
@@ -279,6 +329,7 @@ def _decompose_to_tickets_impl(
         raise ValueError(f"Invalid requirements structure: {e}")
 
     # Call LLM with retry
+    start_time = time.monotonic()
     try:
         data, usage = _call_llm_with_retry(
             messages=[
@@ -294,7 +345,11 @@ def _decompose_to_tickets_impl(
             settings=settings,
         )
     except LLMError as e:
+        elapsed = time.monotonic() - start_time
+        logger.error("Ticket decomposition failed after %.2fs: %s", elapsed, e)
         raise RuntimeError(f"Failed to decompose requirements: {e}")
+
+    elapsed = time.monotonic() - start_time
 
     # Add metadata if not present
     if "metadata" not in data:
@@ -314,6 +369,11 @@ def _decompose_to_tickets_impl(
         validated = TicketCollection(**data)
     except ValidationError as e:
         raise RuntimeError(f"LLM returned invalid ticket structure: {e}")
+
+    logger.info(
+        "Ticket decomposition complete, epic_count=%d, story_count=%d, elapsed=%.2fs, tokens=%s",
+        len(data.get("epics", [])), story_count, elapsed, usage.get("total_tokens", "N/A"),
+    )
 
     return validated.model_dump()
 

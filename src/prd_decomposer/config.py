@@ -1,6 +1,7 @@
 """Configuration settings for PRD Decomposer."""
 
 import threading
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -40,6 +41,22 @@ class Settings(BaseSettings):
         gt=0,
         le=300,
         description="Timeout in seconds for LLM API calls (1-300)",
+    )
+
+    # Logging settings
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
+        default="INFO", description="Logging level"
+    )
+    log_format: Literal["json", "text"] = Field(
+        default="json", description="Log format: json or text"
+    )
+
+    # Input validation settings
+    max_prd_length: int = Field(
+        default=100000,
+        ge=1000,
+        le=500000,
+        description="Maximum PRD text length in characters (1000-500000)",
     )
 
 
