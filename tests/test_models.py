@@ -447,3 +447,30 @@ class TestAgentContext:
         assert restored.goal == original.goal
         assert restored.exploration_paths == original.exploration_paths
         assert restored.self_check == original.self_check
+
+
+# Story tests with AgentContext
+
+
+class TestStory:
+    """Tests for Story model with AgentContext."""
+
+    def test_story_with_agent_context(self):
+        """Story can include optional agent_context."""
+        from prd_decomposer.models import AgentContext, Story
+
+        ctx = AgentContext(goal="Enable password reset")
+        story = Story(
+            title="Create reset endpoint",
+            size="M",
+            agent_context=ctx,
+        )
+        assert story.agent_context is not None
+        assert story.agent_context.goal == "Enable password reset"
+
+    def test_story_without_agent_context(self):
+        """Story works without agent_context (backward compatible)."""
+        from prd_decomposer.models import Story
+
+        story = Story(title="Create reset endpoint", size="M")
+        assert story.agent_context is None

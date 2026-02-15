@@ -109,6 +109,9 @@ class Story(BaseModel):
     requirement_ids: list[str] = Field(
         default_factory=list, description="IDs of source requirements for traceability"
     )
+    agent_context: AgentContext | None = Field(
+        default=None, description="Optional AI agent execution context"
+    )
 
 
 class Epic(BaseModel):

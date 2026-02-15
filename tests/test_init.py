@@ -4,6 +4,7 @@ import prd_decomposer
 
 EXPECTED_EXPORTS = {
     "ANALYZE_PRD_PROMPT",
+    "AgentContext",
     "AmbiguityFlag",
     "CircuitBreaker",
     "CircuitBreakerOpenError",
