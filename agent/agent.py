@@ -170,11 +170,17 @@ def handle_command(
     return f"Unknown command: {command}"
 
 
-def extract_requirements_from_output(output: str) -> dict | None:
-    """Try to extract analyze_prd JSON result from agent output.
+def _extract_json_with_key(output: str, key: str) -> dict | None:
+    """Extract JSON object containing a specific key from agent output.
 
-    The agent often includes the JSON in its response. This function
-    attempts to find and parse it using brace-matching for robustness.
+    Uses brace-balanced parsing for robustness with nested structures.
+
+    Args:
+        output: The agent's response text
+        key: The required key (e.g., "requirements" or "epics")
+
+    Returns:
+        Parsed dict if found and valid, None otherwise
     """
     # Strategy 1: Look for JSON in markdown code fences
     fence_pattern = re.compile(r"```(?:json)?\s*(\{)", re.IGNORECASE)
@@ -184,25 +190,30 @@ def extract_requirements_from_output(output: str) -> dict | None:
         if json_str:
             try:
                 data = json.loads(json_str)
-                if isinstance(data, dict) and "requirements" in data:
+                if isinstance(data, dict) and key in data:
                     return data
             except json.JSONDecodeError:
                 continue
 
-    # Strategy 2: Look for {"requirements": anywhere in text
-    req_pattern = re.compile(r'(\{"requirements"\s*:)', re.IGNORECASE)
-    for match in req_pattern.finditer(output):
+    # Strategy 2: Look for {"key": anywhere in text
+    key_pattern = re.compile(rf'(\{{"{key}"\s*:)', re.IGNORECASE)
+    for match in key_pattern.finditer(output):
         start = match.start(1)
         json_str = _extract_balanced_braces(output, start)
         if json_str:
             try:
                 data = json.loads(json_str)
-                if isinstance(data, dict) and "requirements" in data:
+                if isinstance(data, dict) and key in data:
                     return data
             except json.JSONDecodeError:
                 continue
 
     return None
+
+
+def extract_requirements_from_output(output: str) -> dict | None:
+    """Try to extract analyze_prd JSON result from agent output."""
+    return _extract_json_with_key(output, "requirements")
 
 
 def _extract_balanced_braces(text: str, start: int) -> str | None:
@@ -252,38 +263,12 @@ def _extract_balanced_braces(text: str, start: int) -> str | None:
 
 def _is_tickets_response(output: str) -> bool:
     """Check if output likely contains decompose_to_tickets results."""
-    return '"epics"' in output or "'epics'" in output
+    return '"epics"' in output
 
 
 def _extract_tickets_from_output(output: str) -> dict | None:
     """Try to extract decompose_to_tickets JSON result from agent output."""
-    # Strategy 1: Look for JSON in markdown code fences
-    fence_pattern = re.compile(r"```(?:json)?\s*(\{)", re.IGNORECASE)
-    for match in fence_pattern.finditer(output):
-        start = match.start(1)
-        json_str = _extract_balanced_braces(output, start)
-        if json_str:
-            try:
-                data = json.loads(json_str)
-                if isinstance(data, dict) and "epics" in data:
-                    return data
-            except json.JSONDecodeError:
-                continue
-
-    # Strategy 2: Look for {"epics": anywhere in text
-    epics_pattern = re.compile(r'(\{"epics"\s*:)', re.IGNORECASE)
-    for match in epics_pattern.finditer(output):
-        start = match.start(1)
-        json_str = _extract_balanced_braces(output, start)
-        if json_str:
-            try:
-                data = json.loads(json_str)
-                if isinstance(data, dict) and "epics" in data:
-                    return data
-            except json.JSONDecodeError:
-                continue
-
-    return None
+    return _extract_json_with_key(output, "epics")
 
 
 def parse_args() -> argparse.Namespace:
@@ -494,6 +479,9 @@ async def main() -> None:
                 )
                 print("\r" + " " * 12 + "\r", end="")  # Clear "Thinking..."
 
+                # Always show the assistant's prose response first
+                print(f"\nAssistant: {final_output}\n")
+
                 # Try to extract and store requirements from analyze_prd results
                 extracted = extract_requirements_from_output(final_output)
                 if extracted:
@@ -502,8 +490,8 @@ async def main() -> None:
                         reqs = extracted.get("requirements", [])
                         print(f"[DEBUG] Stored {len(reqs)} requirements")
 
-                    # Show formatted analysis output
-                    print("\n" + "=" * 50)
+                    # Show formatted analysis summary below the prose
+                    print("=" * 50)
                     print(format_analysis_summary(extracted))
                     print()
                     print(format_requirements_table(extracted))
@@ -519,15 +507,12 @@ async def main() -> None:
                 elif _is_tickets_response(final_output):
                     tickets = _extract_tickets_from_output(final_output)
                     if tickets:
-                        print("\n" + "=" * 50)
+                        # Show formatted ticket summary below the prose
+                        print("=" * 50)
                         print(format_ticket_summary(tickets))
                         print()
                         print(format_tickets_hierarchy(tickets))
                         print("=" * 50 + "\n")
-                    else:
-                        print(f"\nAssistant: {final_output}\n")
-                else:
-                    print(f"\nAssistant: {final_output}\n")
 
                 # Update history with this turn's complete input/output
                 conversation_history = new_history
