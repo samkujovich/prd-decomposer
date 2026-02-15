@@ -12,6 +12,12 @@ from agents import Agent, Runner
 from agents.items import TResponseInputItem
 from agents.mcp import MCPServerStdio, MCPServerStdioParams
 
+from agent.formatters import (
+    format_analysis_summary,
+    format_requirements_table,
+    format_ticket_summary,
+    format_tickets_hierarchy,
+)
 from agent.session_state import SessionState
 
 # Retry configuration for MCP server connection
@@ -244,6 +250,42 @@ def _extract_balanced_braces(text: str, start: int) -> str | None:
     return None  # Unbalanced braces
 
 
+def _is_tickets_response(output: str) -> bool:
+    """Check if output likely contains decompose_to_tickets results."""
+    return '"epics"' in output or "'epics'" in output
+
+
+def _extract_tickets_from_output(output: str) -> dict | None:
+    """Try to extract decompose_to_tickets JSON result from agent output."""
+    # Strategy 1: Look for JSON in markdown code fences
+    fence_pattern = re.compile(r"```(?:json)?\s*(\{)", re.IGNORECASE)
+    for match in fence_pattern.finditer(output):
+        start = match.start(1)
+        json_str = _extract_balanced_braces(output, start)
+        if json_str:
+            try:
+                data = json.loads(json_str)
+                if isinstance(data, dict) and "epics" in data:
+                    return data
+            except json.JSONDecodeError:
+                continue
+
+    # Strategy 2: Look for {"epics": anywhere in text
+    epics_pattern = re.compile(r'(\{"epics"\s*:)', re.IGNORECASE)
+    for match in epics_pattern.finditer(output):
+        start = match.start(1)
+        json_str = _extract_balanced_braces(output, start)
+        if json_str:
+            try:
+                data = json.loads(json_str)
+                if isinstance(data, dict) and "epics" in data:
+                    return data
+            except json.JSONDecodeError:
+                continue
+
+    return None
+
+
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
@@ -457,15 +499,31 @@ async def main() -> None:
                 if extracted:
                     session.store_requirements(extracted)
                     if verbose:
-                        print(f"[DEBUG] Stored {len(extracted.get('requirements', []))} requirements")
+                        reqs = extracted.get("requirements", [])
+                        print(f"[DEBUG] Stored {len(reqs)} requirements")
+
+                    # Show formatted analysis output
+                    print("\n" + "=" * 50)
+                    print(format_analysis_summary(extracted))
+                    print()
+                    print(format_requirements_table(extracted))
+                    print()
 
                     # Show ambiguity summary if any
                     ambiguities = session.get_active_ambiguities()
                     if ambiguities:
-                        print(f"\nAssistant: {final_output}")
-                        print("\n" + "=" * 40)
                         print(session.format_ambiguities_display())
-                        print("=" * 40 + "\n")
+                    print("=" * 50 + "\n")
+
+                # Try to extract tickets from decompose_to_tickets results
+                elif _is_tickets_response(final_output):
+                    tickets = _extract_tickets_from_output(final_output)
+                    if tickets:
+                        print("\n" + "=" * 50)
+                        print(format_ticket_summary(tickets))
+                        print()
+                        print(format_tickets_hierarchy(tickets))
+                        print("=" * 50 + "\n")
                     else:
                         print(f"\nAssistant: {final_output}\n")
                 else:

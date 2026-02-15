@@ -416,8 +416,8 @@ class TestFormatters:
         assert "🟢 [S] Login form" in result
         assert "🟡 [M] Password reset" in result
         assert "🔴 [L] Charts" in result
-        assert "2 epic(s)" in result
-        assert "3 story(ies)" in result
+        assert "2 epics" in result
+        assert "3 stories" in result
 
     def test_format_tickets_hierarchy_empty(self):
         """Format empty tickets."""
@@ -446,8 +446,8 @@ class TestFormatters:
         result = format_analysis_summary(requirements)
 
         assert "## Analysis Complete" in result
-        assert "2 requirement(s)" in result
-        assert "3 ambiguity(ies)" in result
+        assert "2 requirements" in result
+        assert "3 ambiguities" in result
         assert "🔴 1 critical" in result
         assert "🟡 1 warning" in result
         assert "💡 1 suggestion" in result
@@ -478,8 +478,8 @@ class TestFormatters:
         result = format_ticket_summary(tickets)
 
         assert "## Decomposition Complete" in result
-        assert "1 epic(s)" in result
-        assert "3 story(ies)" in result
+        assert "1 epic" in result
+        assert "3 stories" in result
         assert "🟢 2 Small" in result
         assert "🟡 1 Medium" in result
         assert "🔴 0 Large" in result

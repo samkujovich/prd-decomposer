@@ -7,6 +7,23 @@ for better readability in the terminal.
 from typing import Any
 
 
+def _pluralize(count: int, singular: str, plural: str) -> str:
+    """Return singular or plural form based on count."""
+    return singular if count == 1 else plural
+
+
+def _truncate(text: str, max_len: int) -> str:
+    """Truncate text with ellipsis if too long."""
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 3] + "..."
+
+
+def _escape_pipe(text: str) -> str:
+    """Escape pipe characters for markdown tables."""
+    return text.replace("|", "\\|")
+
+
 def format_requirements_table(requirements: dict[str, Any]) -> str:
     """Format requirements as a markdown table.
 
@@ -28,7 +45,7 @@ def format_requirements_table(requirements: dict[str, Any]) -> str:
 
     for req in reqs:
         req_id = req.get("id", "?")
-        title = req.get("title", "Untitled")[:40]
+        title = _escape_pipe(_truncate(req.get("title", "Untitled"), 40))
         priority = req.get("priority", "medium")
         amb_count = len(req.get("ambiguity_flags", []))
         amb_display = str(amb_count) if amb_count > 0 else "-"
@@ -76,7 +93,9 @@ def format_tickets_hierarchy(tickets: dict[str, Any]) -> str:
 
     # Summary
     total_stories = sum(len(e.get("stories", [])) for e in epics)
-    lines.append(f"\n**Summary:** {len(epics)} epic(s), {total_stories} story(ies)")
+    epic_noun = _pluralize(len(epics), "epic", "epics")
+    story_noun = _pluralize(total_stories, "story", "stories")
+    lines.append(f"\n**Summary:** {len(epics)} {epic_noun}, {total_stories} {story_noun}")
 
     return "\n".join(lines)
 
@@ -109,8 +128,9 @@ def format_analysis_summary(requirements: dict[str, Any]) -> str:
             elif sev == "suggestion":
                 suggestion += 1
 
+    req_noun = _pluralize(total_reqs, "requirement", "requirements")
     lines = ["## Analysis Complete\n"]
-    lines.append(f"**{total_reqs} requirement(s)** extracted")
+    lines.append(f"**{total_reqs} {req_noun}** extracted")
 
     if total_ambiguities > 0:
         parts = []
@@ -121,7 +141,8 @@ def format_analysis_summary(requirements: dict[str, Any]) -> str:
         if suggestion > 0:
             parts.append(f"💡 {suggestion} suggestion")
 
-        lines.append(f"\n⚠️ **{total_ambiguities} ambiguity(ies)** found: {', '.join(parts)}")
+        amb_noun = _pluralize(total_ambiguities, "ambiguity", "ambiguities")
+        lines.append(f"\n⚠️ **{total_ambiguities} {amb_noun}** found: {', '.join(parts)}")
     else:
         lines.append("\n✅ No ambiguities detected")
 
@@ -140,17 +161,19 @@ def format_ticket_summary(tickets: dict[str, Any]) -> str:
     epics = tickets.get("epics", [])
     total_stories = sum(len(e.get("stories", [])) for e in epics)
 
-    # Size breakdown
+    # Size breakdown (only count known sizes, ignore unknown)
     sizes = {"S": 0, "M": 0, "L": 0}
     for epic in epics:
         for story in epic.get("stories", []):
-            size = story.get("size", "M")
+            size = story.get("size")
             if size in sizes:
                 sizes[size] += 1
 
+    epic_noun = _pluralize(len(epics), "epic", "epics")
+    story_noun = _pluralize(total_stories, "story", "stories")
     lines = [
         "## Decomposition Complete\n",
-        f"**{len(epics)} epic(s)** with **{total_stories} story(ies)**",
+        f"**{len(epics)} {epic_noun}** with **{total_stories} {story_noun}**",
         f"\nSize breakdown: 🟢 {sizes['S']} Small, 🟡 {sizes['M']} Medium, 🔴 {sizes['L']} Large",
     ]
 
