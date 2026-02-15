@@ -620,9 +620,10 @@ class TestAnalyzePrd:
         # Create PRD that exceeds the limit
         oversized_prd = "x" * 2000  # 2000 chars
         settings = Settings(max_prd_length=1000)  # Limit to 1000
+        mock_client = MagicMock()  # Need to pass client to avoid OpenAI API key requirement
 
         with pytest.raises(ValueError, match="exceeds maximum length"):
-            _analyze_prd_impl(oversized_prd, settings=settings)
+            _analyze_prd_impl(oversized_prd, client=mock_client, settings=settings)
 
     def test_analyze_prd_accepts_input_at_max_length(self):
         """Verify analyze_prd accepts PRD exactly at max length."""
