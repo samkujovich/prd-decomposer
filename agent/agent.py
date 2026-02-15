@@ -2,6 +2,8 @@
 
 import argparse
 import asyncio
+import json
+import re
 import sys
 import traceback
 from pathlib import Path
@@ -9,6 +11,8 @@ from pathlib import Path
 from agents import Agent, Runner
 from agents.items import TResponseInputItem
 from agents.mcp import MCPServerStdio, MCPServerStdioParams
+
+from agent.session_state import SessionState
 
 # Retry configuration for MCP server connection
 MAX_CONNECTION_RETRIES = 3
@@ -66,6 +70,121 @@ You have access to three tools via the MCP server:
 - Pass analyze_prd results directly to decompose_to_tickets
 - If you encounter errors, explain them clearly to the user
 - Be conversational and explain what you're doing at each step"""
+
+
+def parse_command(user_input: str) -> tuple[str | None, int | None, str | None]:
+    """Parse special commands from user input.
+
+    Returns:
+        Tuple of (command, index, argument) where:
+        - command: "accept", "dismiss", "clarify", "tickets", "ambiguities", or None
+        - index: 1-based index for accept/dismiss/clarify, or None
+        - argument: clarification text for "clarify", or None
+    """
+    stripped = user_input.strip().lower()
+
+    # Simple commands
+    if stripped in ("tickets", "ticket", "decompose"):
+        return ("tickets", None, None)
+    if stripped in ("ambiguities", "ambigs", "status"):
+        return ("ambiguities", None, None)
+
+    # accept N
+    match = re.match(r"accept\s+(\d+)", stripped)
+    if match:
+        return ("accept", int(match.group(1)), None)
+
+    # dismiss N
+    match = re.match(r"dismiss\s+(\d+)", stripped)
+    if match:
+        return ("dismiss", int(match.group(1)), None)
+
+    # clarify N "text" or clarify N text
+    match = re.match(r'clarify\s+(\d+)\s+"([^"]+)"', user_input.strip())
+    if match:
+        return ("clarify", int(match.group(1)), match.group(2))
+    match = re.match(r"clarify\s+(\d+)\s+(.+)", user_input.strip())
+    if match:
+        return ("clarify", int(match.group(1)), match.group(2))
+
+    return (None, None, None)
+
+
+def handle_command(
+    command: str,
+    index: int | None,
+    argument: str | None,
+    session: SessionState,
+) -> str:
+    """Handle a special command and return the response to display.
+
+    Args:
+        command: The command name
+        index: Optional 1-based index for the ambiguity
+        argument: Optional argument (clarification text)
+        session: The session state
+
+    Returns:
+        Response text to display to the user
+    """
+    if command == "ambiguities":
+        return session.format_ambiguities_display()
+
+    if command == "accept":
+        if index is None:
+            return "Usage: accept [n] - specify which ambiguity to accept"
+        amb_id = session.accept_ambiguity(index)
+        if amb_id:
+            remaining = len(session.get_active_ambiguities())
+            return f"Accepted ambiguity #{index}. {remaining} remaining."
+        return f"Invalid index: {index}. Use 'ambiguities' to see the list."
+
+    if command == "dismiss":
+        if index is None:
+            return "Usage: dismiss [n] - specify which ambiguity to dismiss"
+        amb_id = session.dismiss_ambiguity(index)
+        if amb_id:
+            remaining = len(session.get_active_ambiguities())
+            return f"Dismissed ambiguity #{index}. {remaining} remaining."
+        return f"Invalid index: {index}. Use 'ambiguities' to see the list."
+
+    if command == "clarify":
+        if index is None or argument is None:
+            return 'Usage: clarify [n] "clarification text"'
+        req_id = session.add_clarification(index, argument)
+        if req_id:
+            remaining = len(session.get_active_ambiguities())
+            return f"Added clarification to {req_id}. {remaining} ambiguities remaining."
+        return f"Invalid index: {index}. Use 'ambiguities' to see the list."
+
+    return f"Unknown command: {command}"
+
+
+def extract_requirements_from_output(output: str) -> dict | None:
+    """Try to extract analyze_prd JSON result from agent output.
+
+    The agent often includes the JSON in its response. This function
+    attempts to find and parse it.
+    """
+    # Look for JSON blocks in markdown code fences
+    json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", output, re.DOTALL)
+    if json_match:
+        try:
+            data = json.loads(json_match.group(1))
+            if "requirements" in data:
+                return data
+        except json.JSONDecodeError:
+            pass
+
+    # Look for inline JSON with "requirements" key
+    json_match = re.search(r'(\{"requirements":\s*\[.*?\]\s*,.*?\})', output, re.DOTALL)
+    if json_match:
+        try:
+            return json.loads(json_match.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    return None
 
 
 def parse_args() -> argparse.Namespace:
@@ -208,10 +327,14 @@ async def main() -> None:
         runner = Runner()
         conversation_history: list[TResponseInputItem] = []
 
+        # Session state for tracking requirements and user decisions
+        session = SessionState()
+
         print("PRD Decomposer Agent")
         print("=" * 40)
         print("I help convert PRDs into Jira tickets.")
         print("Paste your PRD or provide a file path to get started.")
+        print("\nCommands: accept [n], dismiss [n], clarify [n] \"text\", tickets, ambiguities")
         print("Type 'quit' to exit.\n")
 
         while True:
@@ -221,6 +344,42 @@ async def main() -> None:
                     print("Goodbye!")
                     break
                 if not user_input:
+                    continue
+
+                # Check for special commands first
+                command, index, argument = parse_command(user_input)
+
+                if command == "tickets":
+                    # Special handling: generate tickets with clarifications
+                    if not session.current_requirements:
+                        print("\nNo requirements loaded. Analyze a PRD first.\n")
+                        continue
+
+                    # Get requirements with clarifications injected
+                    clarified = session.get_requirements_with_clarifications()
+                    clarifications_note = ""
+                    if session.clarifications:
+                        clarifications_note = (
+                            "\n\nNote: The following clarifications have been added:\n"
+                            + "\n".join(
+                                f"- {req_id}: {text}"
+                                for req_id, text in session.clarifications.items()
+                            )
+                        )
+
+                    # Send request to decompose with clarifications
+                    decompose_request = (
+                        f"Generate Jira tickets from these requirements. "
+                        f"Call decompose_to_tickets with this JSON:\n\n"
+                        f"```json\n{json.dumps(clarified)}\n```"
+                        f"{clarifications_note}"
+                    )
+                    user_input = decompose_request
+
+                elif command in ("accept", "dismiss", "clarify", "ambiguities"):
+                    # Handle locally without LLM call
+                    response = handle_command(command, index, argument, session)
+                    print(f"\n{response}\n")
                     continue
 
                 # Build input: previous history + new user message
@@ -236,7 +395,24 @@ async def main() -> None:
                 )
                 print("\r" + " " * 12 + "\r", end="")  # Clear "Thinking..."
 
-                print(f"\nAssistant: {final_output}\n")
+                # Try to extract and store requirements from analyze_prd results
+                extracted = extract_requirements_from_output(final_output)
+                if extracted:
+                    session.store_requirements(extracted)
+                    if verbose:
+                        print(f"[DEBUG] Stored {len(extracted.get('requirements', []))} requirements")
+
+                    # Show ambiguity summary if any
+                    ambiguities = session.get_active_ambiguities()
+                    if ambiguities:
+                        print(f"\nAssistant: {final_output}")
+                        print("\n" + "=" * 40)
+                        print(session.format_ambiguities_display())
+                        print("=" * 40 + "\n")
+                    else:
+                        print(f"\nAssistant: {final_output}\n")
+                else:
+                    print(f"\nAssistant: {final_output}\n")
 
                 # Update history with this turn's complete input/output
                 conversation_history = new_history
