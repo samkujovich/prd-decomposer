@@ -1,0 +1,150 @@
+{
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "title": "Global Search Bar",
+      "description": "Add a global search bar to the header with a prominent search icon that expands to an input field.",
+      "acceptance_criteria": [
+        "Search bar is present in the header",
+        "Search icon expands to input field",
+        "Keyboard shortcut Cmd/Ctrl + K focuses the search bar",
+        "Placeholder text reads 'Search projects, tasks, files...'",
+        "Recent searches dropdown shows last 5 searches",
+        "Clear button appears when text is entered"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-002",
+      "title": "Instant Search Results",
+      "description": "Display search results instantly as the user types.",
+      "acceptance_criteria": [
+        "Search begins after 2 characters are entered",
+        "Input is debounced by 200ms",
+        "Loading indicator is shown during search",
+        "Results are displayed in categorized sections",
+        "Matching text is highlighted in results"
+      ],
+      "dependencies": [
+        "REQ-001"
+      ],
+      "ambiguity_flags": [
+        {
+          "category": "vague_quantifier",
+          "issue": "'Results should appear quickly' is not defined",
+          "severity": "warning",
+          "suggested_action": "Specify a target time for results to appear, e.g., 'within 500ms'"
+        }
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-003",
+      "title": "Search Scope",
+      "description": "Search across all content types including projects, tasks, files, people, and comments.",
+      "acceptance_criteria": [
+        "Search includes projects by name and description",
+        "Search includes tasks by title, description, and comments",
+        "Search includes files by filename and extracted text content",
+        "Search includes people by name, email, and role",
+        "Search includes comments by text and author",
+        "Show count per category in results"
+      ],
+      "dependencies": [
+        "REQ-001"
+      ],
+      "ambiguity_flags": [],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-004",
+      "title": "Filters and Facets",
+      "description": "Allow users to refine search results using filters and facets.",
+      "acceptance_criteria": [
+        "Filter by content type with checkboxes",
+        "Filter by date range (created, modified)",
+        "Filter by owner/creator",
+        "Filter by status for tasks (open, closed)",
+        "Filter by tags/labels",
+        "Filters update results instantly"
+      ],
+      "dependencies": [
+        "REQ-001",
+        "REQ-003"
+      ],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-005",
+      "title": "Advanced Search Syntax",
+      "description": "Support advanced search operators for power users.",
+      "acceptance_criteria": [
+        "Support for 'exact phrase' matches",
+        "Support for type filtering with 'type:task'",
+        "Support for owner filtering with 'owner:@username'",
+        "Support for date filters with 'created:>2024-01-01'",
+        "Support for status filters with 'is:unread'",
+        "Support for excluding terms with '-keyword'",
+        "Support for Boolean OR operations"
+      ],
+      "dependencies": [
+        "REQ-001"
+      ],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-006",
+      "title": "Search Results Page",
+      "description": "Provide a full search results page with additional features.",
+      "acceptance_criteria": [
+        "Full results page available at /search",
+        "All filters visible in sidebar",
+        "Results are paginated with 20 per page",
+        "Sort options include relevance, date, and name",
+        "Ability to save search as filter/view",
+        "Export results to CSV"
+      ],
+      "dependencies": [
+        "REQ-001",
+        "REQ-004"
+      ],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-007",
+      "title": "Search Analytics",
+      "description": "Track and analyze search behavior to improve the feature.",
+      "acceptance_criteria": [
+        "Log all search queries in an anonymized manner",
+        "Track click-through rate per result",
+        "Identify zero-result queries",
+        "Surface trending searches"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [
+        {
+          "category": "security_concern",
+          "issue": "Anonymization of search queries is not detailed",
+          "severity": "critical",
+          "suggested_action": "Specify the method of anonymization to ensure user privacy"
+        }
+      ],
+      "priority": "low"
+    }
+  ],
+  "summary": "Implement a comprehensive global search feature to enhance user ability to find content quickly and efficiently across the platform.",
+  "source_hash": "f9776e79",
+  "_metadata": {
+    "analyzed_at": "2026-02-15T19:28:06.911157+00:00",
+    "prompt_version": "1.6.0",
+    "model": "gpt-4o",
+    "prompt_tokens": 1276,
+    "completion_tokens": 1086,
+    "total_tokens": 2362
+  }
+}

@@ -1,0 +1,128 @@
+{
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "title": "Single-Page Checkout",
+      "description": "Consolidate the checkout process into a single, scrollable page with sections for cart summary, shipping information, payment method, and order review.",
+      "acceptance_criteria": [
+        "Checkout process is on a single page",
+        "Cart summary is collapsible on mobile devices",
+        "Page is responsive and fast"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [
+        {
+          "category": "vague_quantifier",
+          "issue": "The term 'fast and responsive' is not defined with specific performance metrics.",
+          "severity": "warning",
+          "suggested_action": "Define specific performance metrics, such as page load time under 2 seconds."
+        }
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-002",
+      "title": "Guest Checkout",
+      "description": "Allow users to complete purchases without creating an account, requiring only an email address for order confirmation.",
+      "acceptance_criteria": [
+        "Users can checkout without account creation",
+        "Email address is required for order confirmation",
+        "Option to create an account post-purchase with one click",
+        "Guest orders are stored and linked by email"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-003",
+      "title": "Address Autocomplete",
+      "description": "Implement address autocomplete using Google Places API to support international addresses and validate them before submission.",
+      "acceptance_criteria": [
+        "Address autocomplete is implemented using Google Places API",
+        "Supports international addresses",
+        "Validates addresses before submission",
+        "Displays 'We can't deliver here' for unsupported regions"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-004",
+      "title": "Multiple Payment Methods",
+      "description": "Support a variety of payment options including credit/debit cards, PayPal, Apple Pay, Google Pay, and Buy Now Pay Later (Klarna).",
+      "acceptance_criteria": [
+        "Support for Visa, Mastercard, and Amex",
+        "Support for PayPal",
+        "Support for Apple Pay on Safari/iOS",
+        "Support for Google Pay on Chrome/Android",
+        "Support for Buy Now Pay Later with Klarna"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [
+        {
+          "category": "missing_acceptance_criteria",
+          "issue": "The term 'seamless' for payment processing is not defined with specific criteria.",
+          "severity": "suggestion",
+          "suggested_action": "Define what constitutes 'seamless' payment processing, such as transaction completion within 5 seconds."
+        }
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-005",
+      "title": "Real-time Validation",
+      "description": "Validate form fields in real-time as the user types, showing inline errors.",
+      "acceptance_criteria": [
+        "Email format is validated",
+        "Card number is validated using Luhn algorithm",
+        "Expiration date is validated to not be in the past",
+        "CVV is validated to be 3-4 digits",
+        "Shipping address completeness is validated",
+        "Inline errors are displayed"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-006",
+      "title": "Order Summary",
+      "description": "Display an itemized order summary including product details, pricing, and totals.",
+      "acceptance_criteria": [
+        "Displays product thumbnails, names, and quantities",
+        "Shows individual prices and line totals",
+        "Displays subtotal, shipping cost, tax, discount codes, and grand total"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-007",
+      "title": "Promo Code Support",
+      "description": "Allow users to enter promo codes and see the discount applied to their order.",
+      "acceptance_criteria": [
+        "Single input field for promo code with 'Apply' button",
+        "Displays success/error message",
+        "Shows discount amount",
+        "Supports percentage and fixed discounts",
+        "Validates code server-side"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    }
+  ],
+  "summary": "Redesign the e-commerce checkout process to reduce cart abandonment and improve conversion rates by implementing a single-page checkout, guest checkout, address autocomplete, multiple payment methods, real-time validation, order summary, and promo code support.",
+  "source_hash": "e36b1e44",
+  "_metadata": {
+    "analyzed_at": "2026-02-15T19:25:51.575558+00:00",
+    "prompt_version": "1.6.0",
+    "model": "gpt-4o",
+    "prompt_tokens": 1187,
+    "completion_tokens": 1047,
+    "total_tokens": 2234
+  }
+}

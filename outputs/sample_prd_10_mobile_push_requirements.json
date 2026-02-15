@@ -1,0 +1,151 @@
+{
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "title": "Push Notification Opt-in",
+      "description": "Request user permission for push notifications with a value proposition and track opt-in rates.",
+      "acceptance_criteria": [
+        "Display value proposition before system prompt",
+        "Explain notification types to users",
+        "Provide 'Enable Notifications' and 'Maybe Later' buttons",
+        "Track opt-in rate for analytics",
+        "Do not re-prompt users who declined"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [
+        {
+          "category": "missing_acceptance_criteria",
+          "issue": "No specific target for opt-in rate provided",
+          "severity": "warning",
+          "suggested_action": "Define a target opt-in rate, e.g., 'Push opt-in rate > 60%'"
+        }
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-002",
+      "title": "Device Registration",
+      "description": "Register devices for push notifications and manage device tokens.",
+      "acceptance_criteria": [
+        "Store device token on successful opt-in",
+        "Associate token with user account",
+        "Support multiple devices per user",
+        "Update token when app reports changes",
+        "Remove stale tokens after 90 days of no delivery"
+      ],
+      "dependencies": [
+        "REQ-001"
+      ],
+      "ambiguity_flags": [],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-003",
+      "title": "Notification Types",
+      "description": "Support various categories of push notifications including immediate, batched, and transactional types.",
+      "acceptance_criteria": [
+        "Support immediate notifications for direct messages, @mentions, task assignments, and due date reminders",
+        "Support batched notifications for activity summaries, weekly digest, and new features announcement",
+        "Support transactional notifications for password reset, login from new device, and payment confirmation"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-004",
+      "title": "Notification Preferences",
+      "description": "Allow users to control their notification settings.",
+      "acceptance_criteria": [
+        "Provide a master toggle for all push notifications",
+        "Provide per-category toggles",
+        "Allow setting quiet hours and weekend quiet mode",
+        "Sync preferences across devices"
+      ],
+      "dependencies": [
+        "REQ-003"
+      ],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-005",
+      "title": "Rich Notifications",
+      "description": "Enhance notifications with rich content and interaction options.",
+      "acceptance_criteria": [
+        "Include user avatar for messages",
+        "Show action buttons like Reply, Mark Done, Dismiss",
+        "Support notification grouping/threading",
+        "Provide deep links to relevant app screens",
+        "Support expandable content for long messages"
+      ],
+      "dependencies": [
+        "REQ-003"
+      ],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-006",
+      "title": "Notification Delivery",
+      "description": "Ensure reliable delivery of notifications with appropriate infrastructure.",
+      "acceptance_criteria": [
+        "Queue notifications through background workers",
+        "Handle platform-specific payload formats",
+        "Respect device preferences such as DND mode",
+        "Track delivery status",
+        "Handle bounced/invalid tokens"
+      ],
+      "dependencies": [
+        "REQ-002"
+      ],
+      "ambiguity_flags": [],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-007",
+      "title": "A/B Testing",
+      "description": "Test the effectiveness of notifications through A/B testing.",
+      "acceptance_criteria": [
+        "Vary message content",
+        "Test different send times",
+        "Measure open rates per variant",
+        "Automatically select the winning variant"
+      ],
+      "dependencies": [
+        "REQ-006"
+      ],
+      "ambiguity_flags": [],
+      "priority": "low"
+    },
+    {
+      "id": "REQ-008",
+      "title": "Analytics Dashboard",
+      "description": "Track and display push notification metrics.",
+      "acceptance_criteria": [
+        "Track opt-in rate",
+        "Track delivery rate",
+        "Track open rate by notification type",
+        "Track unsubscribe rate",
+        "Track time-to-open distribution",
+        "Provide device/OS breakdown"
+      ],
+      "dependencies": [
+        "REQ-001",
+        "REQ-006"
+      ],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    }
+  ],
+  "summary": "Implement push notification support for iOS and Android apps to enhance user engagement and provide timely updates.",
+  "source_hash": "424a792f",
+  "_metadata": {
+    "analyzed_at": "2026-02-15T19:30:12.510381+00:00",
+    "prompt_version": "1.6.0",
+    "model": "gpt-4o",
+    "prompt_tokens": 1339,
+    "completion_tokens": 1025,
+    "total_tokens": 2364
+  }
+}

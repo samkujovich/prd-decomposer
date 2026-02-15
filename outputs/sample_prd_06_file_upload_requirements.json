@@ -1,0 +1,134 @@
+{
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "title": "Drag-and-Drop Upload Zone",
+      "description": "Create a modern upload interface with a large drop zone, visual feedback, and support for multiple file selection.",
+      "acceptance_criteria": [
+        "Large drop zone with dashed border is present",
+        "Visual feedback on drag hover (border color change, background highlight)",
+        "Click to open file picker alternative is available",
+        "Supports selecting multiple files",
+        "Displays file type icons based on extension"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-002",
+      "title": "File Validation",
+      "description": "Validate files before upload, including size, extension, MIME type, and malware scanning.",
+      "acceptance_criteria": [
+        "File size checked against limit (configurable per file type)",
+        "File extension validated against allowed list",
+        "MIME type matches extension",
+        "Files scanned for malware using ClamAV",
+        "Clear error message shown for rejected files"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-003",
+      "title": "Chunked Upload",
+      "description": "Implement chunked upload for large files with support for resuming on connection failure.",
+      "acceptance_criteria": [
+        "Files split into 5MB chunks",
+        "Chunks uploaded in parallel (max 3 concurrent)",
+        "Supports resume on connection failure",
+        "Partial uploads stored for 24 hours",
+        "Per-chunk progress shown"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-004",
+      "title": "Progress Tracking",
+      "description": "Display upload progress with overall and individual file progress bars, speed indicator, and cancel options.",
+      "acceptance_criteria": [
+        "Overall progress bar for batch",
+        "Individual progress per file",
+        "Upload speed indicator (MB/s)",
+        "Estimated time remaining",
+        "Cancel button per file and for entire batch"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-005",
+      "title": "Post-Upload Processing",
+      "description": "Process files after upload, including thumbnail generation, metadata extraction, and storage in CDN.",
+      "acceptance_criteria": [
+        "Thumbnails generated for images (150x150, 300x300, 600x600)",
+        "Metadata extracted (dimensions, duration, page count)",
+        "Preview generated for documents (first page as image)",
+        "OCR run on PDF/images if text extraction enabled",
+        "Files stored in CDN with geographic distribution"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-006",
+      "title": "Upload API",
+      "description": "Provide a programmatic upload API with endpoints for initiating, uploading chunks, completing, checking status, and canceling uploads.",
+      "acceptance_criteria": [
+        "POST /api/v1/uploads/initiate endpoint available",
+        "PUT /api/v1/uploads/{id}/chunks/{n} endpoint available",
+        "POST /api/v1/uploads/{id}/complete endpoint available",
+        "GET /api/v1/uploads/{id}/status endpoint available",
+        "DELETE /api/v1/uploads/{id} endpoint available",
+        "All endpoints require authentication via API key or OAuth token"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-007",
+      "title": "Storage Integration",
+      "description": "Support multiple storage backends and generate signed URLs for secure downloads.",
+      "acceptance_criteria": [
+        "Support for AWS S3 as primary storage",
+        "Support for Google Cloud Storage as backup",
+        "Support for local filesystem in development",
+        "Signed URLs generated with expiration"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-008",
+      "title": "Security Requirements",
+      "description": "Ensure security of file uploads with encryption, signed URLs, rate limiting, and virus scanning.",
+      "acceptance_criteria": [
+        "Files encrypted at rest (AES-256)",
+        "Files encrypted in transit (TLS 1.3)",
+        "Signed URLs expire after 1 hour",
+        "Rate limit of 100 uploads per hour per user",
+        "All uploads virus scanned before availability"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "high"
+    }
+  ],
+  "summary": "Develop a robust file upload service supporting large files, multiple file types, batch uploads, and comprehensive security measures.",
+  "source_hash": "126eb8f5",
+  "_metadata": {
+    "analyzed_at": "2026-02-15T19:27:26.692765+00:00",
+    "prompt_version": "1.6.0",
+    "model": "gpt-4o",
+    "prompt_tokens": 1405,
+    "completion_tokens": 1085,
+    "total_tokens": 2490
+  }
+}

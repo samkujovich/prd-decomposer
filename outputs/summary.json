@@ -1,0 +1,72 @@
+[
+  {
+    "prd": "sample_prd_01_rate_limiting.md",
+    "requirements_count": 6,
+    "ambiguity_count": 2,
+    "epic_count": 6,
+    "story_count": 13
+  },
+  {
+    "prd": "sample_prd_02_user_onboarding.md",
+    "requirements_count": 6,
+    "ambiguity_count": 1,
+    "epic_count": 1,
+    "story_count": 6
+  },
+  {
+    "prd": "sample_prd_03_checkout.md",
+    "requirements_count": 7,
+    "ambiguity_count": 2,
+    "epic_count": 6,
+    "story_count": 7
+  },
+  {
+    "prd": "sample_prd_04_notifications.md",
+    "requirements_count": 7,
+    "ambiguity_count": 0,
+    "epic_count": 3,
+    "story_count": 6
+  },
+  {
+    "prd": "sample_prd_05_analytics.md",
+    "requirements_count": 7,
+    "ambiguity_count": 1,
+    "epic_count": 4,
+    "story_count": 9
+  },
+  {
+    "prd": "sample_prd_06_file_upload.md",
+    "requirements_count": 8,
+    "ambiguity_count": 0,
+    "epic_count": 4,
+    "story_count": 8
+  },
+  {
+    "prd": "sample_prd_07_search.md",
+    "requirements_count": 7,
+    "ambiguity_count": 2,
+    "epic_count": 4,
+    "story_count": 7
+  },
+  {
+    "prd": "sample_prd_08_payments.md",
+    "requirements_count": 8,
+    "ambiguity_count": 0,
+    "epic_count": 4,
+    "story_count": 11
+  },
+  {
+    "prd": "sample_prd_09_webhooks.md",
+    "requirements_count": 8,
+    "ambiguity_count": 0,
+    "epic_count": 3,
+    "story_count": 8
+  },
+  {
+    "prd": "sample_prd_10_mobile_push.md",
+    "requirements_count": 8,
+    "ambiguity_count": 1,
+    "epic_count": 4,
+    "story_count": 9
+  }
+]

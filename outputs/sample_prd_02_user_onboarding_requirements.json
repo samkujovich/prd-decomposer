@@ -1,0 +1,109 @@
+{
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "title": "Welcome Screen",
+      "description": "Display a welcome screen after email verification with a personalized greeting, product value proposition, and options to get started or skip onboarding.",
+      "acceptance_criteria": [
+        "Welcome screen appears after email verification",
+        "Personalized greeting uses user's name",
+        "Product value proposition displayed in 3-4 bullet points",
+        "\"Get Started\" CTA button is present",
+        "Option to skip onboarding is available"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-002",
+      "title": "User Type Selection",
+      "description": "Allow users to select their user type for personalized onboarding: Individual, Team Lead, or Enterprise Admin.",
+      "acceptance_criteria": [
+        "User can select from Individual, Team Lead, or Enterprise Admin",
+        "Selection is stored in user profile for future personalization"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-003",
+      "title": "Goal Setting",
+      "description": "Present relevant goals based on user type and allow users to select at least one.",
+      "acceptance_criteria": [
+        "Goals presented are relevant to user type",
+        "User can select multiple goals",
+        "At least one goal selection is required"
+      ],
+      "dependencies": [
+        "REQ-002"
+      ],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-004",
+      "title": "Profile Completion",
+      "description": "Collect essential profile information including display name, profile photo, timezone, and notification preferences.",
+      "acceptance_criteria": [
+        "Display name is required and between 2-50 characters",
+        "Profile photo is optional, max 5MB, jpg/png only",
+        "Timezone is auto-detected but can be overridden by user",
+        "User can set notification preferences"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-005",
+      "title": "Interactive Tutorial",
+      "description": "Provide a 5-step interactive tutorial post-profile setup to guide users through key features.",
+      "acceptance_criteria": [
+        "Tutorial includes steps: create project, add task, set due date, invite collaborator, complete task",
+        "Each step has highlighted UI element with tooltip",
+        "\"Next\" and \"Skip\" buttons are available",
+        "Progress indicator shows current step out of 5"
+      ],
+      "dependencies": [
+        "REQ-004"
+      ],
+      "ambiguity_flags": [
+        {
+          "category": "missing_acceptance_criteria",
+          "issue": "No criteria for skipping step 4 if user is Individual",
+          "severity": "warning",
+          "suggested_action": "Specify acceptance criteria for skipping step 4 for Individual user type"
+        }
+      ],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-006",
+      "title": "Completion Celebration",
+      "description": "Celebrate onboarding completion with a confetti animation, success message, quick links, and help center link.",
+      "acceptance_criteria": [
+        "Confetti animation is shown",
+        "\"You're all set!\" message is displayed",
+        "Quick links to common actions are provided",
+        "Link to help center is available"
+      ],
+      "dependencies": [
+        "REQ-005"
+      ],
+      "ambiguity_flags": [],
+      "priority": "low"
+    }
+  ],
+  "summary": "Develop a guided onboarding experience to improve user activation rates and feature discovery.",
+  "source_hash": "d705be59",
+  "_metadata": {
+    "analyzed_at": "2026-02-15T19:25:25.244964+00:00",
+    "prompt_version": "1.6.0",
+    "model": "gpt-4o",
+    "prompt_tokens": 1229,
+    "completion_tokens": 813,
+    "total_tokens": 2042
+  }
+}

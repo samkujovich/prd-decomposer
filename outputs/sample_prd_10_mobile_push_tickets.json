@@ -1,0 +1,420 @@
+{
+  "epics": [
+    {
+      "title": "Push Notification Opt-in and Device Registration",
+      "description": "Implement user opt-in for push notifications and manage device registration.",
+      "stories": [
+        {
+          "title": "Implement Push Notification Opt-in UI",
+          "description": "Create UI to request user permission for push notifications with a value proposition.",
+          "acceptance_criteria": [
+            "Display value proposition before system prompt",
+            "Explain notification types to users",
+            "Provide 'Enable Notifications' and 'Maybe Later' buttons"
+          ],
+          "size": "M",
+          "priority": "high",
+          "labels": [
+            "frontend",
+            "ui",
+            "notifications"
+          ],
+          "requirement_ids": [
+            "REQ-001"
+          ],
+          "agent_context": {
+            "goal": "Increase user engagement by encouraging opt-in for push notifications.",
+            "exploration_paths": [
+              "push notification UI",
+              "user engagement"
+            ],
+            "exploration_hints": [
+              "src/components/notifications/",
+              "src/pages/"
+            ],
+            "known_patterns": [
+              "Follow existing modal patterns"
+            ],
+            "verification_tests": [
+              "test_opt_in_ui_display"
+            ],
+            "self_check": [
+              "Is the value proposition clear and compelling?",
+              "Does the UI adhere to accessibility standards?"
+            ]
+          }
+        },
+        {
+          "title": "Track Push Notification Opt-in Rates",
+          "description": "Implement tracking for user opt-in rates for push notifications.",
+          "acceptance_criteria": [
+            "Track opt-in rate for analytics",
+            "Do not re-prompt users who declined"
+          ],
+          "size": "M",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "analytics",
+            "notifications"
+          ],
+          "requirement_ids": [
+            "REQ-001"
+          ],
+          "agent_context": {
+            "goal": "Measure the effectiveness of the opt-in process to improve user engagement strategies.",
+            "exploration_paths": [
+              "analytics",
+              "user tracking"
+            ],
+            "exploration_hints": [
+              "src/analytics/",
+              "src/notifications/"
+            ],
+            "known_patterns": [
+              "Use existing analytics service"
+            ],
+            "verification_tests": [
+              "test_opt_in_tracking"
+            ],
+            "self_check": [
+              "Are opt-in rates accurately recorded?",
+              "Is user privacy respected in tracking?"
+            ]
+          }
+        },
+        {
+          "title": "Device Registration for Push Notifications",
+          "description": "Register devices for push notifications and manage device tokens.",
+          "acceptance_criteria": [
+            "Store device token on successful opt-in",
+            "Associate token with user account",
+            "Support multiple devices per user"
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "notifications",
+            "database"
+          ],
+          "requirement_ids": [
+            "REQ-002"
+          ],
+          "agent_context": {
+            "goal": "Ensure reliable delivery of push notifications by managing device registrations.",
+            "exploration_paths": [
+              "device registration",
+              "token management"
+            ],
+            "exploration_hints": [
+              "src/notifications/",
+              "src/database/"
+            ],
+            "known_patterns": [
+              "Follow existing token storage patterns"
+            ],
+            "verification_tests": [
+              "test_device_registration"
+            ],
+            "self_check": [
+              "Are tokens securely stored?",
+              "Can users manage multiple devices effectively?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "notifications",
+        "user engagement"
+      ]
+    },
+    {
+      "title": "Notification Types and Preferences",
+      "description": "Support various types of notifications and allow users to control their notification settings.",
+      "stories": [
+        {
+          "title": "Implement Immediate and Batched Notification Types",
+          "description": "Support immediate and batched notifications for various user activities.",
+          "acceptance_criteria": [
+            "Support immediate notifications for direct messages, @mentions, task assignments, and due date reminders",
+            "Support batched notifications for activity summaries, weekly digest, and new features announcement"
+          ],
+          "size": "L",
+          "priority": "medium",
+          "labels": [
+            "backend",
+            "notifications"
+          ],
+          "requirement_ids": [
+            "REQ-003"
+          ],
+          "agent_context": {
+            "goal": "Enhance user experience by providing timely and relevant notifications.",
+            "exploration_paths": [
+              "notification types",
+              "user engagement"
+            ],
+            "exploration_hints": [
+              "src/notifications/"
+            ],
+            "known_patterns": [
+              "Use existing notification service"
+            ],
+            "verification_tests": [
+              "test_immediate_notifications",
+              "test_batched_notifications"
+            ],
+            "self_check": [
+              "Are notifications delivered in a timely manner?",
+              "Do batched notifications provide value to the user?"
+            ]
+          }
+        },
+        {
+          "title": "Develop Notification Preferences UI",
+          "description": "Create UI for users to control their notification settings.",
+          "acceptance_criteria": [
+            "Provide a master toggle for all push notifications",
+            "Provide per-category toggles",
+            "Allow setting quiet hours and weekend quiet mode",
+            "Sync preferences across devices"
+          ],
+          "size": "L",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "ui",
+            "notifications"
+          ],
+          "requirement_ids": [
+            "REQ-004"
+          ],
+          "agent_context": {
+            "goal": "Empower users to customize their notification experience.",
+            "exploration_paths": [
+              "notification preferences",
+              "user settings"
+            ],
+            "exploration_hints": [
+              "src/components/settings/",
+              "src/pages/"
+            ],
+            "known_patterns": [
+              "Follow existing settings UI patterns"
+            ],
+            "verification_tests": [
+              "test_notification_preferences_ui"
+            ],
+            "self_check": [
+              "Are preferences easily accessible and understandable?",
+              "Do changes sync correctly across devices?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "notifications",
+        "user preferences"
+      ]
+    },
+    {
+      "title": "Rich Notifications and Delivery Infrastructure",
+      "description": "Enhance notifications with rich content and ensure reliable delivery.",
+      "stories": [
+        {
+          "title": "Enhance Notifications with Rich Content",
+          "description": "Include rich content and interaction options in notifications.",
+          "acceptance_criteria": [
+            "Include user avatar for messages",
+            "Show action buttons like Reply, Mark Done, Dismiss",
+            "Support notification grouping/threading",
+            "Provide deep links to relevant app screens",
+            "Support expandable content for long messages"
+          ],
+          "size": "L",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "notifications"
+          ],
+          "requirement_ids": [
+            "REQ-005"
+          ],
+          "agent_context": {
+            "goal": "Increase user interaction with notifications by providing rich content.",
+            "exploration_paths": [
+              "rich notifications",
+              "user interaction"
+            ],
+            "exploration_hints": [
+              "src/components/notifications/"
+            ],
+            "known_patterns": [
+              "Use existing notification rendering patterns"
+            ],
+            "verification_tests": [
+              "test_rich_notifications"
+            ],
+            "self_check": [
+              "Do rich notifications enhance user engagement?",
+              "Are action buttons intuitive and functional?"
+            ]
+          }
+        },
+        {
+          "title": "Implement Notification Delivery Infrastructure",
+          "description": "Ensure reliable delivery of notifications with appropriate infrastructure.",
+          "acceptance_criteria": [
+            "Queue notifications through background workers",
+            "Handle platform-specific payload formats",
+            "Respect device preferences such as DND mode",
+            "Track delivery status",
+            "Handle bounced/invalid tokens"
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "infrastructure",
+            "notifications"
+          ],
+          "requirement_ids": [
+            "REQ-006"
+          ],
+          "agent_context": {
+            "goal": "Ensure notifications are delivered reliably and efficiently to users.",
+            "exploration_paths": [
+              "notification delivery",
+              "background processing"
+            ],
+            "exploration_hints": [
+              "src/notifications/",
+              "src/infrastructure/"
+            ],
+            "known_patterns": [
+              "Use existing queue processing patterns"
+            ],
+            "verification_tests": [
+              "test_notification_delivery"
+            ],
+            "self_check": [
+              "Is the delivery infrastructure scalable?",
+              "Are delivery failures handled gracefully?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "notifications",
+        "delivery"
+      ]
+    },
+    {
+      "title": "Notification Analytics and A/B Testing",
+      "description": "Track notification metrics and test effectiveness through A/B testing.",
+      "stories": [
+        {
+          "title": "Develop Analytics Dashboard for Notifications",
+          "description": "Track and display push notification metrics.",
+          "acceptance_criteria": [
+            "Track opt-in rate",
+            "Track delivery rate",
+            "Track open rate by notification type",
+            "Track unsubscribe rate",
+            "Track time-to-open distribution",
+            "Provide device/OS breakdown"
+          ],
+          "size": "L",
+          "priority": "medium",
+          "labels": [
+            "backend",
+            "analytics",
+            "dashboard"
+          ],
+          "requirement_ids": [
+            "REQ-008"
+          ],
+          "agent_context": {
+            "goal": "Provide insights into notification performance to improve user engagement strategies.",
+            "exploration_paths": [
+              "analytics",
+              "dashboard"
+            ],
+            "exploration_hints": [
+              "src/analytics/",
+              "src/dashboard/"
+            ],
+            "known_patterns": [
+              "Use existing analytics dashboard framework"
+            ],
+            "verification_tests": [
+              "test_analytics_dashboard"
+            ],
+            "self_check": [
+              "Are metrics displayed accurately and in real-time?",
+              "Is the dashboard user-friendly and informative?"
+            ]
+          }
+        },
+        {
+          "title": "Implement A/B Testing for Notifications",
+          "description": "Test the effectiveness of notifications through A/B testing.",
+          "acceptance_criteria": [
+            "Vary message content",
+            "Test different send times",
+            "Measure open rates per variant",
+            "Automatically select the winning variant"
+          ],
+          "size": "M",
+          "priority": "low",
+          "labels": [
+            "backend",
+            "testing",
+            "notifications"
+          ],
+          "requirement_ids": [
+            "REQ-007"
+          ],
+          "agent_context": {
+            "goal": "Optimize notification strategies by identifying the most effective variants.",
+            "exploration_paths": [
+              "A/B testing",
+              "notification effectiveness"
+            ],
+            "exploration_hints": [
+              "src/testing/",
+              "src/notifications/"
+            ],
+            "known_patterns": [
+              "Use existing A/B testing framework"
+            ],
+            "verification_tests": [
+              "test_ab_testing_notifications"
+            ],
+            "self_check": [
+              "Are test results statistically significant?",
+              "Is the winning variant correctly identified and applied?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "analytics",
+        "testing"
+      ]
+    }
+  ],
+  "metadata": {
+    "generated_at": "2026-02-15T19:30:37.591276+00:00",
+    "prompt_version": "1.6.0",
+    "model": "gpt-4o",
+    "requirement_count": 8,
+    "story_count": 9,
+    "usage": {
+      "prompt_tokens": 2358,
+      "completion_tokens": 2227,
+      "total_tokens": 4585
+    }
+  }
+}

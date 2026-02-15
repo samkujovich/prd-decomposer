@@ -1,0 +1,370 @@
+{
+  "epics": [
+    {
+      "title": "Global Search Bar",
+      "description": "Implement a global search bar in the header to enhance user navigation and content discovery.",
+      "stories": [
+        {
+          "title": "Add global search bar to header",
+          "description": "Implement a search bar in the header with a prominent search icon that expands to an input field.",
+          "acceptance_criteria": [
+            "Search bar is present in the header",
+            "Search icon expands to input field",
+            "Keyboard shortcut Cmd/Ctrl + K focuses the search bar",
+            "Placeholder text reads 'Search projects, tasks, files...'",
+            "Recent searches dropdown shows last 5 searches",
+            "Clear button appears when text is entered"
+          ],
+          "size": "M",
+          "priority": "high",
+          "labels": [
+            "frontend",
+            "ui",
+            "accessibility"
+          ],
+          "requirement_ids": [
+            "REQ-001"
+          ],
+          "agent_context": {
+            "goal": "Enhance user navigation by providing a quick access search feature.",
+            "exploration_paths": [
+              "search bar UI",
+              "header components",
+              "keyboard shortcuts"
+            ],
+            "exploration_hints": [
+              "src/components/header/",
+              "src/components/search/"
+            ],
+            "known_patterns": [
+              "Use existing UI components",
+              "Follow accessibility guidelines"
+            ],
+            "verification_tests": [
+              "test_search_bar_visibility",
+              "test_keyboard_shortcut"
+            ],
+            "self_check": [
+              "Is the search bar accessible for screen readers?",
+              "Does the keyboard shortcut work on all supported browsers?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "search",
+        "ui"
+      ]
+    },
+    {
+      "title": "Search Functionality",
+      "description": "Implement search functionality to provide instant and categorized search results.",
+      "stories": [
+        {
+          "title": "Implement instant search results",
+          "description": "Display search results instantly as the user types, with categorized sections and highlighted matches.",
+          "acceptance_criteria": [
+            "Search begins after 2 characters are entered",
+            "Input is debounced by 200ms",
+            "Loading indicator is shown during search",
+            "Results are displayed in categorized sections",
+            "Matching text is highlighted in results"
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "frontend",
+            "search"
+          ],
+          "requirement_ids": [
+            "REQ-002"
+          ],
+          "agent_context": {
+            "goal": "Provide users with real-time search results to enhance efficiency.",
+            "exploration_paths": [
+              "real-time search",
+              "debouncing",
+              "categorization"
+            ],
+            "exploration_hints": [
+              "src/services/search/",
+              "src/components/results/"
+            ],
+            "known_patterns": [
+              "Use existing search service",
+              "Implement debouncing logic"
+            ],
+            "verification_tests": [
+              "test_instant_search_results",
+              "test_result_categorization"
+            ],
+            "self_check": [
+              "Are results appearing within the expected time frame?",
+              "Is the loading indicator visible during search?"
+            ]
+          }
+        },
+        {
+          "title": "Implement search scope across content types",
+          "description": "Ensure the search functionality covers all specified content types with accurate categorization.",
+          "acceptance_criteria": [
+            "Search includes projects by name and description",
+            "Search includes tasks by title, description, and comments",
+            "Search includes files by filename and extracted text content",
+            "Search includes people by name, email, and role",
+            "Search includes comments by text and author",
+            "Show count per category in results"
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "search"
+          ],
+          "requirement_ids": [
+            "REQ-003"
+          ],
+          "agent_context": {
+            "goal": "Enable comprehensive search across various content types for better user experience.",
+            "exploration_paths": [
+              "content indexing",
+              "search categorization"
+            ],
+            "exploration_hints": [
+              "src/services/search/",
+              "src/models/"
+            ],
+            "known_patterns": [
+              "Use existing indexing mechanisms",
+              "Follow data categorization standards"
+            ],
+            "verification_tests": [
+              "test_search_scope",
+              "test_category_counts"
+            ],
+            "self_check": [
+              "Are all content types being indexed correctly?",
+              "Is the categorization accurate and intuitive?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "search",
+        "functionality"
+      ]
+    },
+    {
+      "title": "Search Enhancements",
+      "description": "Enhance search capabilities with filters, advanced syntax, and a detailed results page.",
+      "stories": [
+        {
+          "title": "Implement filters and facets for search results",
+          "description": "Allow users to refine search results using various filters and facets.",
+          "acceptance_criteria": [
+            "Filter by content type with checkboxes",
+            "Filter by date range (created, modified)",
+            "Filter by owner/creator",
+            "Filter by status for tasks (open, closed)",
+            "Filter by tags/labels",
+            "Filters update results instantly"
+          ],
+          "size": "L",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "backend",
+            "search"
+          ],
+          "requirement_ids": [
+            "REQ-004"
+          ],
+          "agent_context": {
+            "goal": "Provide users with the ability to refine search results for more precise information retrieval.",
+            "exploration_paths": [
+              "search filters",
+              "faceted search"
+            ],
+            "exploration_hints": [
+              "src/components/filters/",
+              "src/services/search/"
+            ],
+            "known_patterns": [
+              "Use existing filter components",
+              "Implement instant update logic"
+            ],
+            "verification_tests": [
+              "test_filters_functionality",
+              "test_facets_display"
+            ],
+            "self_check": [
+              "Do filters update results without delay?",
+              "Are all filter options intuitive and user-friendly?"
+            ]
+          }
+        },
+        {
+          "title": "Support advanced search syntax",
+          "description": "Implement support for advanced search operators for power users.",
+          "acceptance_criteria": [
+            "Support for 'exact phrase' matches",
+            "Support for type filtering with 'type:task'",
+            "Support for owner filtering with 'owner:@username'",
+            "Support for date filters with 'created:>2024-01-01'",
+            "Support for status filters with 'is:unread'",
+            "Support for excluding terms with '-keyword'",
+            "Support for Boolean OR operations"
+          ],
+          "size": "L",
+          "priority": "medium",
+          "labels": [
+            "backend",
+            "search"
+          ],
+          "requirement_ids": [
+            "REQ-005"
+          ],
+          "agent_context": {
+            "goal": "Empower advanced users with flexible search options to tailor their queries.",
+            "exploration_paths": [
+              "advanced search syntax",
+              "query parsing"
+            ],
+            "exploration_hints": [
+              "src/services/search/",
+              "src/parsers/"
+            ],
+            "known_patterns": [
+              "Use existing query parsing libraries",
+              "Follow syntax standards"
+            ],
+            "verification_tests": [
+              "test_advanced_search_syntax",
+              "test_query_parsing"
+            ],
+            "self_check": [
+              "Are all advanced operators functioning as expected?",
+              "Is the syntax intuitive for power users?"
+            ]
+          }
+        },
+        {
+          "title": "Develop search results page",
+          "description": "Create a comprehensive search results page with pagination, sorting, and export options.",
+          "acceptance_criteria": [
+            "Full results page available at /search",
+            "All filters visible in sidebar",
+            "Results are paginated with 20 per page",
+            "Sort options include relevance, date, and name",
+            "Ability to save search as filter/view",
+            "Export results to CSV"
+          ],
+          "size": "L",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "ui",
+            "search"
+          ],
+          "requirement_ids": [
+            "REQ-006"
+          ],
+          "agent_context": {
+            "goal": "Provide a detailed and user-friendly interface for viewing and managing search results.",
+            "exploration_paths": [
+              "search results UI",
+              "pagination",
+              "export functionality"
+            ],
+            "exploration_hints": [
+              "src/pages/search/",
+              "src/components/pagination/"
+            ],
+            "known_patterns": [
+              "Use existing pagination components",
+              "Implement export logic"
+            ],
+            "verification_tests": [
+              "test_search_results_page",
+              "test_export_functionality"
+            ],
+            "self_check": [
+              "Is the pagination smooth and intuitive?",
+              "Are all sorting options functioning correctly?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "search",
+        "enhancements"
+      ]
+    },
+    {
+      "title": "Search Analytics",
+      "description": "Implement analytics to track and improve search feature usage and performance.",
+      "stories": [
+        {
+          "title": "Implement search analytics tracking",
+          "description": "Track and analyze search behavior to improve the feature.",
+          "acceptance_criteria": [
+            "Log all search queries in an anonymized manner",
+            "Track click-through rate per result",
+            "Identify zero-result queries",
+            "Surface trending searches"
+          ],
+          "size": "M",
+          "priority": "low",
+          "labels": [
+            "analytics",
+            "backend",
+            "search"
+          ],
+          "requirement_ids": [
+            "REQ-007"
+          ],
+          "agent_context": {
+            "goal": "Gather insights on search usage to enhance feature effectiveness and user satisfaction.",
+            "exploration_paths": [
+              "search analytics",
+              "user behavior tracking"
+            ],
+            "exploration_hints": [
+              "src/analytics/",
+              "src/services/logging/"
+            ],
+            "known_patterns": [
+              "Use existing analytics frameworks",
+              "Ensure data privacy"
+            ],
+            "verification_tests": [
+              "test_search_analytics_logging",
+              "test_anonymization"
+            ],
+            "self_check": [
+              "Is the anonymization method compliant with privacy standards?",
+              "Are all tracked metrics accurate and useful?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "analytics",
+        "search"
+      ]
+    }
+  ],
+  "metadata": {
+    "generated_at": "2026-02-15T19:28:34.179981+00:00",
+    "prompt_version": "1.6.0",
+    "model": "gpt-4o",
+    "requirement_count": 7,
+    "story_count": 7,
+    "usage": {
+      "prompt_tokens": 2422,
+      "completion_tokens": 2114,
+      "total_tokens": 4536
+    }
+  }
+}

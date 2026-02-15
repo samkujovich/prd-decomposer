@@ -1,0 +1,397 @@
+{
+  "epics": [
+    {
+      "title": "File Upload Interface",
+      "description": "Develop a user-friendly drag-and-drop upload interface with file validation and progress tracking.",
+      "stories": [
+        {
+          "title": "Implement Drag-and-Drop Upload Zone",
+          "description": "Create a large drop zone with visual feedback for file uploads.",
+          "acceptance_criteria": [
+            "Large drop zone with dashed border is present",
+            "Visual feedback on drag hover (border color change, background highlight)",
+            "Click to open file picker alternative is available",
+            "Supports selecting multiple files",
+            "Displays file type icons based on extension"
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "ui"
+          ],
+          "requirement_ids": [
+            "REQ-001"
+          ],
+          "agent_context": {
+            "goal": "Enhance user experience by providing an intuitive file upload interface.",
+            "exploration_paths": [
+              "drag-and-drop",
+              "file input",
+              "UI feedback"
+            ],
+            "exploration_hints": [
+              "src/components/upload/"
+            ],
+            "known_patterns": [
+              "Use existing UI library for drag-and-drop"
+            ],
+            "verification_tests": [
+              "test_drag_and_drop_zone"
+            ],
+            "self_check": [
+              "Does the interface support all required file types?",
+              "Is the drag-and-drop area responsive on different devices?"
+            ]
+          }
+        },
+        {
+          "title": "Implement File Validation",
+          "description": "Validate files before upload for size, extension, MIME type, and malware.",
+          "acceptance_criteria": [
+            "File size checked against limit (configurable per file type)",
+            "File extension validated against allowed list",
+            "MIME type matches extension",
+            "Files scanned for malware using ClamAV",
+            "Clear error message shown for rejected files"
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "validation",
+            "security"
+          ],
+          "requirement_ids": [
+            "REQ-002"
+          ],
+          "agent_context": {
+            "goal": "Ensure only valid and safe files are uploaded to the system.",
+            "exploration_paths": [
+              "file validation",
+              "malware scanning",
+              "MIME type checking"
+            ],
+            "exploration_hints": [
+              "src/utils/validation/",
+              "src/services/malware/"
+            ],
+            "known_patterns": [
+              "Use ClamAV for malware scanning"
+            ],
+            "verification_tests": [
+              "test_file_validation"
+            ],
+            "self_check": [
+              "Are all file types correctly validated?",
+              "Does the malware scanning process introduce significant delays?"
+            ]
+          }
+        },
+        {
+          "title": "Develop Progress Tracking UI",
+          "description": "Display upload progress with overall and individual file progress bars.",
+          "acceptance_criteria": [
+            "Overall progress bar for batch",
+            "Individual progress per file",
+            "Upload speed indicator (MB/s)",
+            "Estimated time remaining",
+            "Cancel button per file and for entire batch"
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "ui"
+          ],
+          "requirement_ids": [
+            "REQ-004"
+          ],
+          "agent_context": {
+            "goal": "Provide users with real-time feedback on their upload progress.",
+            "exploration_paths": [
+              "progress bars",
+              "upload speed",
+              "UI components"
+            ],
+            "exploration_hints": [
+              "src/components/progress/"
+            ],
+            "known_patterns": [
+              "Use existing progress bar components"
+            ],
+            "verification_tests": [
+              "test_progress_tracking_ui"
+            ],
+            "self_check": [
+              "Is the progress bar accurate and responsive?",
+              "Can users easily cancel uploads?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "frontend",
+        "ui",
+        "validation"
+      ]
+    },
+    {
+      "title": "Advanced File Upload Mechanisms",
+      "description": "Implement chunked upload and post-upload processing for large files.",
+      "stories": [
+        {
+          "title": "Implement Chunked Upload",
+          "description": "Enable chunked upload for large files with resume support.",
+          "acceptance_criteria": [
+            "Files split into 5MB chunks",
+            "Chunks uploaded in parallel (max 3 concurrent)",
+            "Supports resume on connection failure",
+            "Partial uploads stored for 24 hours",
+            "Per-chunk progress shown"
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "upload",
+            "performance"
+          ],
+          "requirement_ids": [
+            "REQ-003"
+          ],
+          "agent_context": {
+            "goal": "Allow large files to be uploaded efficiently and reliably.",
+            "exploration_paths": [
+              "chunked upload",
+              "file splitting",
+              "resume upload"
+            ],
+            "exploration_hints": [
+              "src/services/upload/"
+            ],
+            "known_patterns": [
+              "Use existing libraries for chunked uploads"
+            ],
+            "verification_tests": [
+              "test_chunked_upload"
+            ],
+            "self_check": [
+              "Does the system handle network interruptions gracefully?",
+              "Are partial uploads managed correctly?"
+            ]
+          }
+        },
+        {
+          "title": "Implement Post-Upload Processing",
+          "description": "Process files after upload, including thumbnail generation and metadata extraction.",
+          "acceptance_criteria": [
+            "Thumbnails generated for images (150x150, 300x300, 600x600)",
+            "Metadata extracted (dimensions, duration, page count)",
+            "Preview generated for documents (first page as image)",
+            "OCR run on PDF/images if text extraction enabled",
+            "Files stored in CDN with geographic distribution"
+          ],
+          "size": "L",
+          "priority": "medium",
+          "labels": [
+            "backend",
+            "processing",
+            "cdn"
+          ],
+          "requirement_ids": [
+            "REQ-005"
+          ],
+          "agent_context": {
+            "goal": "Enhance file usability and accessibility post-upload.",
+            "exploration_paths": [
+              "thumbnail generation",
+              "metadata extraction",
+              "CDN storage"
+            ],
+            "exploration_hints": [
+              "src/services/processing/",
+              "src/services/cdn/"
+            ],
+            "known_patterns": [
+              "Use existing CDN integration"
+            ],
+            "verification_tests": [
+              "test_post_upload_processing"
+            ],
+            "self_check": [
+              "Are thumbnails generated for all image types?",
+              "Is metadata extraction accurate and comprehensive?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "backend",
+        "upload",
+        "processing"
+      ]
+    },
+    {
+      "title": "Upload API and Security",
+      "description": "Develop a secure API for file uploads with comprehensive security measures.",
+      "stories": [
+        {
+          "title": "Develop Upload API",
+          "description": "Create endpoints for initiating, uploading chunks, completing, and managing uploads.",
+          "acceptance_criteria": [
+            "POST /api/v1/uploads/initiate endpoint available",
+            "PUT /api/v1/uploads/{id}/chunks/{n} endpoint available",
+            "POST /api/v1/uploads/{id}/complete endpoint available",
+            "GET /api/v1/uploads/{id}/status endpoint available",
+            "DELETE /api/v1/uploads/{id} endpoint available",
+            "All endpoints require authentication via API key or OAuth token"
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "api",
+            "auth"
+          ],
+          "requirement_ids": [
+            "REQ-006"
+          ],
+          "agent_context": {
+            "goal": "Provide a robust API for programmatic file uploads.",
+            "exploration_paths": [
+              "REST API",
+              "authentication",
+              "file upload"
+            ],
+            "exploration_hints": [
+              "src/api/uploads/"
+            ],
+            "known_patterns": [
+              "Follow RESTful API conventions"
+            ],
+            "verification_tests": [
+              "test_upload_api"
+            ],
+            "self_check": [
+              "Are all endpoints secure and authenticated?",
+              "Does the API handle large file uploads efficiently?"
+            ]
+          }
+        },
+        {
+          "title": "Implement Security Measures for Uploads",
+          "description": "Ensure security of file uploads with encryption, signed URLs, and rate limiting.",
+          "acceptance_criteria": [
+            "Files encrypted at rest (AES-256)",
+            "Files encrypted in transit (TLS 1.3)",
+            "Signed URLs expire after 1 hour",
+            "Rate limit of 100 uploads per hour per user",
+            "All uploads virus scanned before availability"
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "security",
+            "encryption",
+            "backend"
+          ],
+          "requirement_ids": [
+            "REQ-008"
+          ],
+          "agent_context": {
+            "goal": "Protect the system and users from malicious file uploads.",
+            "exploration_paths": [
+              "encryption",
+              "rate limiting",
+              "virus scanning"
+            ],
+            "exploration_hints": [
+              "src/security/"
+            ],
+            "known_patterns": [
+              "Use AES-256 for encryption",
+              "Implement TLS 1.3"
+            ],
+            "verification_tests": [
+              "test_upload_security"
+            ],
+            "self_check": [
+              "Are encryption and decryption processes efficient?",
+              "Is the rate limiting correctly enforced?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "api",
+        "security",
+        "backend"
+      ]
+    },
+    {
+      "title": "Storage and Integration",
+      "description": "Integrate with multiple storage backends and provide secure download links.",
+      "stories": [
+        {
+          "title": "Integrate with Storage Backends",
+          "description": "Support multiple storage backends and generate signed URLs for secure downloads.",
+          "acceptance_criteria": [
+            "Support for AWS S3 as primary storage",
+            "Support for Google Cloud Storage as backup",
+            "Support for local filesystem in development",
+            "Signed URLs generated with expiration"
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "backend",
+            "storage",
+            "integration"
+          ],
+          "requirement_ids": [
+            "REQ-007"
+          ],
+          "agent_context": {
+            "goal": "Ensure reliable and secure storage of uploaded files.",
+            "exploration_paths": [
+              "AWS S3",
+              "Google Cloud Storage",
+              "signed URLs"
+            ],
+            "exploration_hints": [
+              "src/storage/"
+            ],
+            "known_patterns": [
+              "Use AWS SDK for S3 integration"
+            ],
+            "verification_tests": [
+              "test_storage_integration"
+            ],
+            "self_check": [
+              "Are signed URLs generated securely and correctly?",
+              "Is the integration with storage backends seamless?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "storage",
+        "integration",
+        "backend"
+      ]
+    }
+  ],
+  "metadata": {
+    "generated_at": "2026-02-15T19:27:56.286068+00:00",
+    "prompt_version": "1.6.0",
+    "model": "gpt-4o",
+    "requirement_count": 8,
+    "story_count": 8,
+    "usage": {
+      "prompt_tokens": 2426,
+      "completion_tokens": 2242,
+      "total_tokens": 4668
+    }
+  }
+}
