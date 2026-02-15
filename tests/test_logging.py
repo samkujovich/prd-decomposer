@@ -77,6 +77,29 @@ class TestStructuredFormatter:
         assert parsed["module"] == "server"
         assert parsed["function"] == "analyze_prd"
 
+    def test_json_format_with_exception_info(self):
+        """Verify StructuredFormatter handles exc_info without crashing."""
+        formatter = StructuredFormatter()
+        try:
+            raise ValueError("test error")
+        except ValueError:
+            import sys
+            record = logging.LogRecord(
+                name="test",
+                level=logging.ERROR,
+                pathname="test.py",
+                lineno=1,
+                msg="Error occurred",
+                args=None,
+                exc_info=sys.exc_info(),
+            )
+
+        output = formatter.format(record)
+        parsed = json.loads(output)
+
+        assert parsed["message"] == "Error occurred"
+        assert parsed["level"] == "ERROR"
+
     def test_json_format_empty_correlation_id_when_unset(self):
         """Verify correlation_id is empty string when not set."""
         formatter = StructuredFormatter()

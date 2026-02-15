@@ -281,6 +281,10 @@ def _analyze_prd_impl(
     client = client or get_client()
     settings = settings or get_settings()
 
+    # Validate empty/whitespace-only input
+    if not prd_text or not prd_text.strip():
+        raise ValueError("PRD text cannot be empty.")
+
     # Set correlation ID for this request
     request_id = str(uuid.uuid4())[:8]
     correlation_id.set(request_id)

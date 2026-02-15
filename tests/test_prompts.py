@@ -75,3 +75,10 @@ def test_decompose_prompt_has_xml_delimiters():
     """Verify DECOMPOSE_TO_TICKETS_PROMPT wraps input with XML delimiters."""
     assert "<requirements_document>" in DECOMPOSE_TO_TICKETS_PROMPT
     assert "</requirements_document>" in DECOMPOSE_TO_TICKETS_PROMPT
+
+
+def test_prompts_handle_curly_braces_in_input():
+    """Verify .format() doesn't choke on curly braces in user input."""
+    tricky_input = 'The API returns {status: 200} and {"error": null}'
+    formatted = ANALYZE_PRD_PROMPT.format(prd_text=tricky_input)
+    assert tricky_input in formatted

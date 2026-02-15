@@ -151,6 +151,34 @@ def test_ticket_collection_model():
     assert collection.metadata["model"] == "gpt-4o"
 
 
+def test_requirement_empty_id_accepted():
+    """Document that empty string IDs are accepted (no min_length constraint)."""
+    req = Requirement(id="", title="T", description="D", priority="high")
+    assert req.id == ""
+
+
+def test_structured_requirements_empty_list_accepted():
+    """Document that empty requirements list is accepted."""
+    sr = StructuredRequirements(requirements=[], summary="Empty", source_hash="abc")
+    assert len(sr.requirements) == 0
+
+
+def test_epic_empty_stories_accepted():
+    """Document that an epic with no stories is accepted."""
+    epic = Epic(title="E", description="D", stories=[], labels=[])
+    assert len(epic.stories) == 0
+
+
+def test_story_all_sizes_accepted():
+    """Verify all valid t-shirt sizes are accepted."""
+    for size in ("S", "M", "L"):
+        story = Story(
+            title="T", description="D", size=size,
+            acceptance_criteria=[], labels=[], requirement_ids=[],
+        )
+        assert story.size == size
+
+
 def test_ticket_collection_serialization():
     """Verify TicketCollection round-trips through JSON."""
     story = Story(
