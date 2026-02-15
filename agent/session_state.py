@@ -4,6 +4,7 @@ Tracks analyzed requirements and user decisions about ambiguities
 within a single session.
 """
 
+import copy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -32,20 +33,30 @@ class SessionState:
         self.clarifications.clear()
 
     def get_ambiguities(self) -> list[dict[str, Any]]:
-        """Get all ambiguities from current requirements with index."""
+        """Get all ambiguities from current requirements with unique IDs."""
         if not self.current_requirements:
             return []
 
         ambiguities = []
+        # Track counts per (req_id, category) to ensure unique IDs
+        category_counts: dict[str, int] = {}
+
         for req in self.current_requirements.get("requirements", []):
             req_id = req.get("id", "")
             for flag in req.get("ambiguity_flags", []):
-                amb_id = f"{req_id}:{flag.get('category', 'unknown')}"
+                category = flag.get("category", "unknown")
+                # Create unique key and increment counter
+                key = f"{req_id}:{category}"
+                count = category_counts.get(key, 0)
+                category_counts[key] = count + 1
+                # Include index in ID to handle duplicates
+                amb_id = f"{req_id}:{category}:{count}"
+
                 ambiguities.append({
                     "id": amb_id,
                     "requirement_id": req_id,
                     "requirement_title": req.get("title", ""),
-                    "category": flag.get("category", ""),
+                    "category": category,
                     "severity": flag.get("severity", ""),
                     "issue": flag.get("issue", ""),
                     "suggested_action": flag.get("suggested_action", ""),
@@ -99,12 +110,18 @@ class SessionState:
         return None
 
     def get_requirements_with_clarifications(self) -> dict[str, Any] | None:
-        """Get requirements with clarifications injected into descriptions."""
+        """Get requirements with clarifications injected into descriptions.
+
+        Note: Accepted/dismissed ambiguities are tracked for UI display but are
+        NOT filtered from the requirements passed to ticket generation. This is
+        intentional - ambiguities describe PRD quality issues, not whether the
+        requirement should be implemented. A future enhancement could optionally
+        filter dismissed ambiguities from the ambiguity_flags.
+        """
         if not self.current_requirements:
             return None
 
         # Deep copy to avoid mutating original
-        import copy
         result = copy.deepcopy(self.current_requirements)
 
         for req in result.get("requirements", []):
@@ -124,7 +141,9 @@ class SessionState:
         if not active:
             return "No active ambiguities."
 
-        lines = [f"## {len(active)} Ambiguities to Review\n"]
+        count = len(active)
+        noun = "Ambiguity" if count == 1 else "Ambiguities"
+        lines = [f"## {count} {noun} to Review\n"]
 
         severity_emoji = {
             "critical": "🔴",

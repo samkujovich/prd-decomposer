@@ -99,11 +99,12 @@ def parse_command(user_input: str) -> tuple[str | None, int | None, str | None]:
     if match:
         return ("dismiss", int(match.group(1)), None)
 
-    # clarify N "text" or clarify N text
-    match = re.match(r'clarify\s+(\d+)\s+"([^"]+)"', user_input.strip())
+    # clarify N "text" or clarify N text (case-insensitive command, preserve text)
+    original = user_input.strip()
+    match = re.match(r'clarify\s+(\d+)\s+"([^"]+)"', original, re.IGNORECASE)
     if match:
         return ("clarify", int(match.group(1)), match.group(2))
-    match = re.match(r"clarify\s+(\d+)\s+(.+)", user_input.strip())
+    match = re.match(r"clarify\s+(\d+)\s+(.+)", original, re.IGNORECASE)
     if match:
         return ("clarify", int(match.group(1)), match.group(2))
 
@@ -136,7 +137,8 @@ def handle_command(
         amb_id = session.accept_ambiguity(index)
         if amb_id:
             remaining = len(session.get_active_ambiguities())
-            return f"Accepted ambiguity #{index}. {remaining} remaining."
+            noun = "ambiguity" if remaining == 1 else "ambiguities"
+            return f"Accepted ambiguity #{index}. {remaining} {noun} remaining."
         return f"Invalid index: {index}. Use 'ambiguities' to see the list."
 
     if command == "dismiss":
@@ -145,7 +147,8 @@ def handle_command(
         amb_id = session.dismiss_ambiguity(index)
         if amb_id:
             remaining = len(session.get_active_ambiguities())
-            return f"Dismissed ambiguity #{index}. {remaining} remaining."
+            noun = "ambiguity" if remaining == 1 else "ambiguities"
+            return f"Dismissed ambiguity #{index}. {remaining} {noun} remaining."
         return f"Invalid index: {index}. Use 'ambiguities' to see the list."
 
     if command == "clarify":
@@ -154,7 +157,8 @@ def handle_command(
         req_id = session.add_clarification(index, argument)
         if req_id:
             remaining = len(session.get_active_ambiguities())
-            return f"Added clarification to {req_id}. {remaining} ambiguities remaining."
+            noun = "ambiguity" if remaining == 1 else "ambiguities"
+            return f"Added clarification to {req_id}. {remaining} {noun} remaining."
         return f"Invalid index: {index}. Use 'ambiguities' to see the list."
 
     return f"Unknown command: {command}"
@@ -164,27 +168,80 @@ def extract_requirements_from_output(output: str) -> dict | None:
     """Try to extract analyze_prd JSON result from agent output.
 
     The agent often includes the JSON in its response. This function
-    attempts to find and parse it.
+    attempts to find and parse it using brace-matching for robustness.
     """
-    # Look for JSON blocks in markdown code fences
-    json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", output, re.DOTALL)
-    if json_match:
-        try:
-            data = json.loads(json_match.group(1))
-            if "requirements" in data:
-                return data
-        except json.JSONDecodeError:
-            pass
+    # Strategy 1: Look for JSON in markdown code fences
+    fence_pattern = re.compile(r"```(?:json)?\s*(\{)", re.IGNORECASE)
+    for match in fence_pattern.finditer(output):
+        start = match.start(1)
+        json_str = _extract_balanced_braces(output, start)
+        if json_str:
+            try:
+                data = json.loads(json_str)
+                if isinstance(data, dict) and "requirements" in data:
+                    return data
+            except json.JSONDecodeError:
+                continue
 
-    # Look for inline JSON with "requirements" key
-    json_match = re.search(r'(\{"requirements":\s*\[.*?\]\s*,.*?\})', output, re.DOTALL)
-    if json_match:
-        try:
-            return json.loads(json_match.group(1))
-        except json.JSONDecodeError:
-            pass
+    # Strategy 2: Look for {"requirements": anywhere in text
+    req_pattern = re.compile(r'(\{"requirements"\s*:)', re.IGNORECASE)
+    for match in req_pattern.finditer(output):
+        start = match.start(1)
+        json_str = _extract_balanced_braces(output, start)
+        if json_str:
+            try:
+                data = json.loads(json_str)
+                if isinstance(data, dict) and "requirements" in data:
+                    return data
+            except json.JSONDecodeError:
+                continue
 
     return None
+
+
+def _extract_balanced_braces(text: str, start: int) -> str | None:
+    """Extract a balanced JSON object starting at the given position.
+
+    Args:
+        text: The full text to extract from
+        start: Position of the opening brace
+
+    Returns:
+        The extracted JSON string, or None if braces don't balance
+    """
+    if start >= len(text) or text[start] != "{":
+        return None
+
+    depth = 0
+    in_string = False
+    escape_next = False
+
+    for i in range(start, len(text)):
+        char = text[i]
+
+        if escape_next:
+            escape_next = False
+            continue
+
+        if char == "\\":
+            escape_next = True
+            continue
+
+        if char == '"' and not escape_next:
+            in_string = not in_string
+            continue
+
+        if in_string:
+            continue
+
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+
+    return None  # Unbalanced braces
 
 
 def parse_args() -> argparse.Namespace:

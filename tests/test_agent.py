@@ -74,11 +74,18 @@ class TestParseCommand:
         assert idx is None
         assert arg is None
 
-    def test_parse_case_insensitive(self):
-        """Commands are case-insensitive."""
+    def test_parse_case_insensitive_accept(self):
+        """Accept command is case-insensitive."""
         cmd, idx, _ = parse_command("ACCEPT 1")
         assert cmd == "accept"
         assert idx == 1
+
+    def test_parse_clarify_case_insensitive_preserves_text(self):
+        """Clarify command is case-insensitive but preserves text case."""
+        cmd, idx, arg = parse_command('CLARIFY 1 "Response Time Under 200ms"')
+        assert cmd == "clarify"
+        assert idx == 1
+        assert arg == "Response Time Under 200ms"  # Preserves original case
 
 
 class TestExtractRequirements:
@@ -103,6 +110,24 @@ Let me know if you need changes.'''
         output = "I'll help you analyze the PRD."
         result = extract_requirements_from_output(output)
         assert result is None
+
+    def test_extract_nested_json(self):
+        """Extract requirements with nested objects."""
+        output = '''```json
+{"requirements": [{"id": "REQ-001", "ambiguity_flags": [{"category": "vague", "issue": "fast"}]}], "summary": "test"}
+```'''
+        result = extract_requirements_from_output(output)
+        assert result is not None
+        assert result["requirements"][0]["ambiguity_flags"][0]["category"] == "vague"
+
+    def test_extract_json_with_escaped_quotes(self):
+        """Extract JSON containing escaped quotes."""
+        output = '''```json
+{"requirements": [{"id": "REQ-001", "title": "Test \\"quoted\\" text"}], "summary": "ok"}
+```'''
+        result = extract_requirements_from_output(output)
+        assert result is not None
+        assert "quoted" in result["requirements"][0]["title"]
 
     def test_extract_invalid_json(self):
         """Return None for invalid JSON."""
@@ -153,6 +178,30 @@ class TestSessionState:
         assert len(ambiguities) == 2
         assert ambiguities[0]["requirement_id"] == "REQ-001"
         assert ambiguities[0]["category"] == "vague_quantifier"
+
+    def test_ambiguity_ids_are_unique(self):
+        """Two ambiguities with same category get unique IDs."""
+        session = SessionState()
+        session.store_requirements({
+            "requirements": [
+                {
+                    "id": "REQ-001",
+                    "title": "Test",
+                    "ambiguity_flags": [
+                        {"category": "vague_quantifier", "severity": "warning", "issue": "fast", "suggested_action": "define"},
+                        {"category": "vague_quantifier", "severity": "warning", "issue": "scalable", "suggested_action": "define"},
+                    ],
+                }
+            ]
+        })
+
+        ambiguities = session.get_ambiguities()
+        assert len(ambiguities) == 2
+        # IDs should be unique even with same category
+        ids = [a["id"] for a in ambiguities]
+        assert len(ids) == len(set(ids)), f"Duplicate IDs found: {ids}"
+        assert "REQ-001:vague_quantifier:0" in ids
+        assert "REQ-001:vague_quantifier:1" in ids
 
     def test_accept_ambiguity(self):
         """Accept an ambiguity by index."""
@@ -227,7 +276,7 @@ class TestSessionState:
         })
 
         display = session.format_ambiguities_display()
-        assert "1 Ambiguities to Review" in display
+        assert "1 Ambiguity to Review" in display
         assert "🔴" in display  # critical emoji
         assert "REQ-001" in display
         assert "fast undefined" in display
@@ -241,25 +290,29 @@ class TestHandleCommand:
         session = SessionState()
         session.store_requirements({
             "requirements": [
-                {"id": "REQ-001", "title": "Test", "ambiguity_flags": [{"category": "vague", "severity": "warning", "issue": "test", "suggested_action": "fix"}]},
+                {"id": "REQ-001", "title": "Test", "ambiguity_flags": [
+                    {"category": "vague", "severity": "warning", "issue": "test", "suggested_action": "fix"}
+                ]},
             ]
         })
 
         result = handle_command("ambiguities", None, None, session)
-        assert "1 Ambiguities" in result
+        assert "1 Ambiguity" in result
 
     def test_handle_accept(self):
         """Handle accept command."""
         session = SessionState()
         session.store_requirements({
             "requirements": [
-                {"id": "REQ-001", "title": "Test", "ambiguity_flags": [{"category": "vague", "severity": "warning", "issue": "test", "suggested_action": "fix"}]},
+                {"id": "REQ-001", "title": "Test", "ambiguity_flags": [
+                    {"category": "vague", "severity": "warning", "issue": "test", "suggested_action": "fix"}
+                ]},
             ]
         })
 
         result = handle_command("accept", 1, None, session)
         assert "Accepted ambiguity #1" in result
-        assert "0 remaining" in result
+        assert "0 ambiguities remaining" in result
 
     def test_handle_accept_no_index(self):
         """Handle accept without index."""
@@ -267,17 +320,42 @@ class TestHandleCommand:
         result = handle_command("accept", None, None, session)
         assert "Usage:" in result
 
+    def test_handle_dismiss(self):
+        """Handle dismiss command."""
+        session = SessionState()
+        session.store_requirements({
+            "requirements": [
+                {"id": "REQ-001", "title": "Test", "ambiguity_flags": [
+                    {"category": "vague", "severity": "warning", "issue": "test", "suggested_action": "fix"},
+                    {"category": "missing", "severity": "critical", "issue": "no AC", "suggested_action": "add"},
+                ]},
+            ]
+        })
+
+        result = handle_command("dismiss", 1, None, session)
+        assert "Dismissed ambiguity #1" in result
+        assert "1 ambiguity remaining" in result  # singular
+
+    def test_handle_dismiss_no_index(self):
+        """Handle dismiss without index."""
+        session = SessionState()
+        result = handle_command("dismiss", None, None, session)
+        assert "Usage:" in result
+
     def test_handle_clarify(self):
         """Handle clarify command."""
         session = SessionState()
         session.store_requirements({
             "requirements": [
-                {"id": "REQ-001", "title": "Test", "ambiguity_flags": [{"category": "vague", "severity": "warning", "issue": "test", "suggested_action": "fix"}]},
+                {"id": "REQ-001", "title": "Test", "ambiguity_flags": [
+                    {"category": "vague", "severity": "warning", "issue": "test", "suggested_action": "fix"}
+                ]},
             ]
         })
 
         result = handle_command("clarify", 1, "under 200ms", session)
         assert "Added clarification to REQ-001" in result
+        assert "0 ambiguities remaining" in result
 
 
 class TestFormatters:
