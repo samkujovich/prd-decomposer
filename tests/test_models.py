@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from prd_decomposer.models import (
+    AgentContext,
     AmbiguityFlag,
     Epic,
     Requirement,
@@ -387,3 +388,78 @@ def test_ambiguity_flag_json_roundtrip():
     assert restored.category == "security_concern"
     assert restored.severity == "critical"
     assert "DoS" in restored.suggested_action
+
+
+# AgentContext tests
+
+
+class TestAgentContext:
+    """Tests for AgentContext model."""
+
+    def test_agent_context_requires_goal(self):
+        """AgentContext requires a goal field."""
+        with pytest.raises(ValidationError):
+            AgentContext()
+
+    def test_agent_context_minimal(self):
+        """AgentContext with only required goal field."""
+        ctx = AgentContext(goal="Enable users to reset passwords")
+        assert ctx.goal == "Enable users to reset passwords"
+        assert ctx.exploration_paths == []
+        assert ctx.exploration_hints == []
+        assert ctx.known_patterns == []
+        assert ctx.verification_tests == []
+        assert ctx.self_check == []
+
+    def test_agent_context_full(self):
+        """AgentContext with all fields populated."""
+        ctx = AgentContext(
+            goal="Enable users to reset passwords",
+            exploration_paths=["auth", "email"],
+            exploration_hints=["src/auth/"],
+            known_patterns=["Use JWT tokens"],
+            verification_tests=["test_reset_flow"],
+            self_check=["Is token secure?"],
+        )
+        assert len(ctx.exploration_paths) == 2
+        assert "src/auth/" in ctx.exploration_hints
+
+    def test_agent_context_json_roundtrip(self):
+        """Verify AgentContext survives JSON serialization."""
+        original = AgentContext(
+            goal="Enable password reset",
+            exploration_paths=["auth", "email"],
+            exploration_hints=["src/auth/"],
+            known_patterns=["Use JWT tokens"],
+            verification_tests=["test_reset_flow"],
+            self_check=["Is token secure?"],
+        )
+        json_str = original.model_dump_json()
+        restored = AgentContext.model_validate_json(json_str)
+
+        assert restored.goal == original.goal
+        assert restored.exploration_paths == original.exploration_paths
+        assert restored.self_check == original.self_check
+
+
+# Story tests with AgentContext
+
+
+class TestStory:
+    """Tests for Story model with AgentContext."""
+
+    def test_story_with_agent_context(self):
+        """Story can include optional agent_context."""
+        ctx = AgentContext(goal="Enable password reset")
+        story = Story(
+            title="Create reset endpoint",
+            size="M",
+            agent_context=ctx,
+        )
+        assert story.agent_context is not None
+        assert story.agent_context.goal == "Enable password reset"
+
+    def test_story_without_agent_context(self):
+        """Story works without agent_context (backward compatible)."""
+        story = Story(title="Create reset endpoint", size="M")
+        assert story.agent_context is None

@@ -6,6 +6,11 @@ for better readability in the terminal.
 
 from typing import Any
 
+# Re-export render_agent_prompt from the canonical location in prd_decomposer
+from prd_decomposer.formatters import render_agent_prompt
+
+__all__ = ["render_agent_prompt"]
+
 
 def _pluralize(count: int, singular: str, plural: str) -> str:
     """Return singular or plural form based on count."""
@@ -178,3 +183,5 @@ def format_ticket_summary(tickets: dict[str, Any]) -> str:
     ]
 
     return "\n".join(lines)
+
+

@@ -80,7 +80,10 @@ def test_decompose_to_tickets_prompt_has_example():
     assert "epics" in DECOMPOSE_TO_TICKETS_PROMPT
     assert "stories" in DECOMPOSE_TO_TICKETS_PROMPT
     # Example should show sizing
-    assert '"size": "M"' in DECOMPOSE_TO_TICKETS_PROMPT or '"size": "S"' in DECOMPOSE_TO_TICKETS_PROMPT
+    assert (
+        '"size": "M"' in DECOMPOSE_TO_TICKETS_PROMPT
+        or '"size": "S"' in DECOMPOSE_TO_TICKETS_PROMPT
+    )
 
 
 def test_analyze_prd_prompt_has_xml_delimiters():
@@ -120,3 +123,23 @@ def test_decompose_prompt_schema_matches_models():
         assert f'"{field_name}"' in DECOMPOSE_TO_TICKETS_PROMPT, (
             f"Epic field '{field_name}' not found in DECOMPOSE_TO_TICKETS_PROMPT"
         )
+
+
+def test_decompose_prompt_includes_agent_context_instructions():
+    """Decomposition prompt instructs LLM to generate agent_context."""
+    from prd_decomposer.prompts import DECOMPOSE_TO_TICKETS_PROMPT
+
+    assert "agent_context" in DECOMPOSE_TO_TICKETS_PROMPT
+    assert "goal" in DECOMPOSE_TO_TICKETS_PROMPT
+    assert "exploration_paths" in DECOMPOSE_TO_TICKETS_PROMPT
+    assert "self_check" in DECOMPOSE_TO_TICKETS_PROMPT
+
+
+def test_decompose_prompt_example_includes_agent_context():
+    """Decomposition prompt example shows agent_context usage."""
+    from prd_decomposer.prompts import DECOMPOSE_TO_TICKETS_PROMPT
+
+    # Example should demonstrate agent_context structure
+    assert '"goal":' in DECOMPOSE_TO_TICKETS_PROMPT
+    assert '"exploration_paths":' in DECOMPOSE_TO_TICKETS_PROMPT
+    assert '"verification_tests":' in DECOMPOSE_TO_TICKETS_PROMPT

@@ -591,7 +591,9 @@ class TestAnalyzePrd:
         result = _analyze_prd_impl(prd_at_limit, client=mock_client, settings=settings)
         assert "requirements" in result
 
-    @pytest.mark.parametrize("empty_input", ["", "   ", "\n\t"], ids=["empty", "whitespace", "newlines"])
+    @pytest.mark.parametrize(
+        "empty_input", ["", "   ", "\n\t"], ids=["empty", "whitespace", "newlines"]
+    )
     def test_analyze_prd_rejects_empty_input(self, empty_input):
         """Verify analyze_prd raises ValueError for empty/whitespace input."""
         with pytest.raises(ValueError, match="cannot be empty"):
@@ -862,9 +864,15 @@ class TestDecomposeToTickets:
         from prd_decomposer.models import SizeDefinition
 
         custom_rubric = SizingRubric(
-            small=SizeDefinition(label="S", duration="Up to 4 hours", scope="Single file", risk="Minimal"),
-            medium=SizeDefinition(label="M", duration="1-2 days", scope="Few modules", risk="Low"),
-            large=SizeDefinition(label="L", duration="1 week", scope="Cross-team", risk="High"),
+            small=SizeDefinition(
+                label="S", duration="Up to 4 hours", scope="Single file", risk="Minimal"
+            ),
+            medium=SizeDefinition(
+                label="M", duration="1-2 days", scope="Few modules", risk="Low"
+            ),
+            large=SizeDefinition(
+                label="L", duration="1 week", scope="Cross-team", risk="High"
+            ),
         )
 
         _decompose_to_tickets_impl(
@@ -1423,3 +1431,43 @@ class TestSizingRubricBugFix:
             decompose_to_tickets(
                 json.dumps(sample_input_requirements), sizing_rubric=rubric_json
             )
+
+
+class TestAgentContextGeneration:
+    """Tests for agent_context generation in decompose_to_tickets."""
+
+    def test_decompose_generates_agent_context(self, mock_client_factory):
+        """decompose_to_tickets generates agent_context for stories."""
+        mock_response = {
+            "epics": [{
+                "title": "Test Epic",
+                "description": "Desc",
+                "stories": [{
+                    "title": "Test Story",
+                    "description": "Do thing",
+                    "size": "M",
+                    "acceptance_criteria": ["AC1"],
+                    "labels": ["backend"],
+                    "requirement_ids": ["REQ-001"],
+                    "agent_context": {
+                        "goal": "Enable feature X",
+                        "exploration_paths": ["feature"],
+                        "exploration_hints": [],
+                        "known_patterns": [],
+                        "verification_tests": ["test_feature"],
+                        "self_check": ["Does it work?"],
+                    },
+                }],
+                "labels": [],
+            }],
+        }
+        mock_client = mock_client_factory(mock_response)
+
+        result = _decompose_to_tickets_impl(
+            requirements={"requirements": [], "summary": "test", "source_hash": "abc"},
+            client=mock_client,
+        )
+
+        story = result["epics"][0]["stories"][0]
+        assert "agent_context" in story
+        assert story["agent_context"]["goal"] == "Enable feature X"

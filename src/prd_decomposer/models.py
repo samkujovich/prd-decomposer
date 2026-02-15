@@ -25,6 +25,36 @@ class AmbiguityFlag(BaseModel):
     )
 
 
+class AgentContext(BaseModel):
+    """AI agent execution context for a story."""
+
+    goal: str = Field(
+        ...,
+        min_length=1,
+        description="The 'why' - what problem this solves and why it matters",
+    )
+    exploration_paths: list[str] = Field(
+        default_factory=list,
+        description="Keywords/concepts to search for during exploration",
+    )
+    exploration_hints: list[str] = Field(
+        default_factory=list,
+        description="Optional specific paths or files to start with if known",
+    )
+    known_patterns: list[str] = Field(
+        default_factory=list,
+        description="Libraries, patterns, or conventions to follow",
+    )
+    verification_tests: list[str] = Field(
+        default_factory=list,
+        description="Test names or patterns that should pass when done",
+    )
+    self_check: list[str] = Field(
+        default_factory=list,
+        description="Questions the agent should verify before marking complete",
+    )
+
+
 class Requirement(BaseModel):
     """A single requirement extracted from a PRD."""
 
@@ -79,6 +109,9 @@ class Story(BaseModel):
     requirement_ids: list[str] = Field(
         default_factory=list, description="IDs of source requirements for traceability"
     )
+    agent_context: AgentContext | None = Field(
+        default=None, description="Optional AI agent execution context"
+    )
 
 
 class Epic(BaseModel):
@@ -102,8 +135,12 @@ class TicketCollection(BaseModel):
 class SizeDefinition(BaseModel):
     """Definition of a single t-shirt size for story estimation."""
 
-    duration: str = Field(..., min_length=1, description="Expected duration (e.g., 'Less than 1 day')")
-    scope: str = Field(..., min_length=1, description="Scope description (e.g., 'Single component')")
+    duration: str = Field(
+        ..., min_length=1, description="Expected duration (e.g., 'Less than 1 day')"
+    )
+    scope: str = Field(
+        ..., min_length=1, description="Scope description (e.g., 'Single component')"
+    )
     risk: str = Field(..., min_length=1, description="Risk level (e.g., 'Low risk')")
 
 

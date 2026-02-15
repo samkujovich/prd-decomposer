@@ -4,6 +4,7 @@ import prd_decomposer
 
 EXPECTED_EXPORTS = {
     "ANALYZE_PRD_PROMPT",
+    "AgentContext",
     "AmbiguityFlag",
     "CircuitBreaker",
     "CircuitBreakerOpenError",
@@ -21,6 +22,7 @@ EXPECTED_EXPORTS = {
     "TicketCollection",
     "export_tickets",
     "get_settings",
+    "render_agent_prompt",
 }
 
 
