@@ -1,5 +1,6 @@
 """Tests for prompt templates."""
 
+from prd_decomposer.models import Epic, Requirement, Story
 from prd_decomposer.prompts import (
     ANALYZE_PRD_PROMPT,
     DECOMPOSE_TO_TICKETS_PROMPT,
@@ -82,3 +83,23 @@ def test_prompts_handle_curly_braces_in_input():
     tricky_input = 'The API returns {status: 200} and {"error": null}'
     formatted = ANALYZE_PRD_PROMPT.format(prd_text=tricky_input)
     assert tricky_input in formatted
+
+
+def test_analyze_prd_prompt_schema_matches_model():
+    """Verify all Requirement model fields appear in ANALYZE_PRD_PROMPT."""
+    for field_name in Requirement.model_fields.keys():
+        assert f'"{field_name}"' in ANALYZE_PRD_PROMPT, (
+            f"Requirement field '{field_name}' not found in ANALYZE_PRD_PROMPT"
+        )
+
+
+def test_decompose_prompt_schema_matches_models():
+    """Verify all Story and Epic model fields appear in DECOMPOSE_TO_TICKETS_PROMPT."""
+    for field_name in Story.model_fields.keys():
+        assert f'"{field_name}"' in DECOMPOSE_TO_TICKETS_PROMPT, (
+            f"Story field '{field_name}' not found in DECOMPOSE_TO_TICKETS_PROMPT"
+        )
+    for field_name in Epic.model_fields.keys():
+        assert f'"{field_name}"' in DECOMPOSE_TO_TICKETS_PROMPT, (
+            f"Epic field '{field_name}' not found in DECOMPOSE_TO_TICKETS_PROMPT"
+        )

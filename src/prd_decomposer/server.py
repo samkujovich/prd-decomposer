@@ -149,7 +149,13 @@ def read_file(
     if not path.is_file():
         raise ValueError(f"Path is not a file: {file_path}")
 
-    return path.read_text(encoding="utf-8")
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        raise ValueError(
+            f"File {file_path} is not a valid UTF-8 text file. "
+            "PRD files must be plain text (Markdown, TXT, etc.)."
+        )
 
 
 def get_client() -> OpenAI:

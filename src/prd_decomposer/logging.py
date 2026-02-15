@@ -15,10 +15,14 @@ class StructuredFormatter(logging.Formatter):
     """JSON log formatter with correlation ID support."""
 
     def format(self, record: logging.LogRecord) -> str:
+        try:
+            message = record.getMessage()
+        except Exception:
+            message = str(record.msg)
         return json.dumps({
             "timestamp": datetime.now(UTC).isoformat(),
             "level": record.levelname,
-            "message": record.getMessage(),
+            "message": message,
             "correlation_id": correlation_id.get(),
             "module": record.module,
             "function": record.funcName,

@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import threading
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -12,6 +13,8 @@ from arcade_core.errors import FatalToolError
 from openai import APIConnectionError, APIError, APITimeoutError, RateLimitError
 
 from prd_decomposer.config import Settings
+from prd_decomposer.logging import correlation_id
+from prd_decomposer.prompts import PROMPT_VERSION
 from prd_decomposer.server import (
     LLMError,
     RateLimiter,
@@ -20,6 +23,8 @@ from prd_decomposer.server import (
     _call_llm_with_retry,
     _decompose_to_tickets_impl,
     _is_path_allowed,
+    analyze_prd,
+    decompose_to_tickets,
     get_client,
     get_rate_limiter,
     read_file,
@@ -88,6 +93,13 @@ class TestReadFileEdgeCases:
         link.symlink_to("/etc/passwd")
         with pytest.raises(FatalToolError):
             read_file(str(link))
+
+    def test_read_file_binary_file_raises_error(self, allowed_tmp_path):
+        """Verify read_file raises FatalToolError for binary files."""
+        binary_file = allowed_tmp_path / "image.png"
+        binary_file.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\xff\xfe\xfd")
+        with pytest.raises(FatalToolError):
+            read_file(str(binary_file))
 
 
 class TestGetClient:
@@ -471,6 +483,7 @@ class TestAnalyzePrd:
         assert result["requirements"][0]["id"] == "REQ-001"
         assert result["summary"] == "Authentication system PRD"
         assert len(result["source_hash"]) == 8
+        assert all(c in "0123456789abcdef" for c in result["source_hash"])
         assert "_metadata" in result
         assert "usage" in result["_metadata"]
         assert "prompt_version" in result["_metadata"]
@@ -632,7 +645,7 @@ class TestDecomposeToTickets:
         assert "metadata" in result
         assert "generated_at" in result["metadata"]
         assert result["metadata"]["model"] == "gpt-4o"
-        assert result["metadata"]["prompt_version"] is not None
+        assert result["metadata"]["prompt_version"] == PROMPT_VERSION
         assert result["metadata"]["requirement_count"] == 1
         assert result["metadata"]["story_count"] == 0
         assert "usage" in result["metadata"]
@@ -767,6 +780,11 @@ class TestDecomposeToTickets:
 
         assert "epics" in result
 
+    def test_decompose_to_tickets_json_array_raises_error(self):
+        """Verify decompose_to_tickets rejects JSON array strings."""
+        with pytest.raises(ValueError, match="must be an object"):
+            _decompose_to_tickets_impl("[1, 2, 3]", client=MagicMock())
+
     def test_decompose_to_tickets_invalid_json_string(self):
         """Verify decompose_to_tickets raises for invalid JSON string."""
         with pytest.raises(ValueError, match="Invalid JSON"):
@@ -840,6 +858,7 @@ class TestIntegrationPipeline:
 
         assert "requirements" in requirements
         assert len(requirements["requirements"]) == 1
+        assert requirements["requirements"][0]["id"] == "REQ-001"
         assert "_metadata" in requirements
 
         tickets = _decompose_to_tickets_impl(requirements, client=mock_client)
@@ -847,6 +866,10 @@ class TestIntegrationPipeline:
         assert "epics" in tickets
         assert len(tickets["epics"]) == 1
         assert tickets["epics"][0]["stories"][0]["requirement_ids"] == ["REQ-001"]
+        # Verify story requirement_ids reference IDs from analyze output
+        analyze_req_ids = {r["id"] for r in requirements["requirements"]}
+        story_req_ids = set(tickets["epics"][0]["stories"][0]["requirement_ids"])
+        assert story_req_ids <= analyze_req_ids
         assert "metadata" in tickets
         assert tickets["metadata"]["requirement_count"] == 1
 
@@ -953,6 +976,23 @@ class TestServerLogging:
 
         messages = [r.message for r in caplog.records]
         assert any("PRD analysis failed" in m for m in messages)
+        error_records = [r for r in caplog.records if "PRD analysis failed" in r.message]
+        assert error_records[0].levelno == logging.ERROR
+
+    def test_analyze_prd_correlation_id_format(self, mock_client_factory):
+        """Verify correlation ID is an 8-char non-empty hex-like string."""
+        mock_response = {
+            "requirements": [],
+            "summary": "Test",
+            "source_hash": "ignored",
+        }
+        mock_client = mock_client_factory(mock_response)
+
+        _analyze_prd_impl("Test PRD", client=mock_client)
+
+        cid = correlation_id.get()
+        assert len(cid) == 8
+        assert cid.strip() != ""
 
 
 class TestCallLLMEdgeCases:
@@ -1033,3 +1073,94 @@ class TestGetRateLimiterThreadSafety:
 
         assert len(results) == 10
         assert all(r is results[0] for r in results)
+
+
+class TestMCPWrappers:
+    """Tests for MCP tool wrapper functions (PE-4)."""
+
+    def test_analyze_prd_wrapper_delegates_to_impl(self, mock_client_factory):
+        """Verify analyze_prd delegates to _analyze_prd_impl."""
+        mock_response = {
+            "requirements": [],
+            "summary": "Test",
+            "source_hash": "ignored",
+        }
+        mock_client = mock_client_factory(mock_response)
+
+        with patch("prd_decomposer.server._analyze_prd_impl") as mock_impl:
+            mock_impl.return_value = {"requirements": [], "summary": "Test", "source_hash": "abc"}
+            result = analyze_prd("Test PRD")
+            mock_impl.assert_called_once_with("Test PRD")
+            assert result == mock_impl.return_value
+
+    def test_decompose_to_tickets_wrapper_delegates_to_impl(self):
+        """Verify decompose_to_tickets delegates to _decompose_to_tickets_impl."""
+        with patch("prd_decomposer.server._decompose_to_tickets_impl") as mock_impl:
+            mock_impl.return_value = {"epics": [], "metadata": {}}
+            result = decompose_to_tickets('{"requirements": []}')
+            mock_impl.assert_called_once_with('{"requirements": []}')
+            assert result == mock_impl.return_value
+
+
+class TestCorrelationIDIsolation:
+    """Tests for correlation ID isolation across threads (QA-2)."""
+
+    def test_concurrent_analyze_prd_correlation_ids_isolated(self, make_llm_response):
+        """Verify each thread gets a unique correlation ID."""
+        mock_response = {
+            "requirements": [],
+            "summary": "Test",
+            "source_hash": "ignored",
+        }
+
+        captured_ids: list[str] = []
+        lock = threading.Lock()
+
+        def worker():
+            mock_client = MagicMock()
+            mock_client.chat.completions.create.return_value = make_llm_response(mock_response)
+            _analyze_prd_impl("Test PRD", client=mock_client)
+            cid = correlation_id.get()
+            with lock:
+                captured_ids.append(cid)
+
+        threads = [threading.Thread(target=worker) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(captured_ids) == 5
+        assert all(len(cid) == 8 for cid in captured_ids)
+        assert len(set(captured_ids)) == 5  # All unique
+
+
+class TestMetadataTimestamps:
+    """Tests for ISO timestamp format in metadata (QA-9)."""
+
+    def test_analyze_prd_timestamp_is_valid_iso(self, mock_client_factory):
+        """Verify _metadata.analyzed_at is a valid ISO timestamp."""
+        mock_response = {
+            "requirements": [],
+            "summary": "Test",
+            "source_hash": "ignored",
+        }
+        mock_client = mock_client_factory(mock_response)
+
+        result = _analyze_prd_impl("Test PRD", client=mock_client)
+
+        ts = result["_metadata"]["analyzed_at"]
+        parsed = datetime.fromisoformat(ts)
+        assert parsed is not None
+
+    def test_decompose_timestamp_is_valid_iso(
+        self, sample_input_requirements, mock_client_factory, sample_epic_response
+    ):
+        """Verify metadata.generated_at is a valid ISO timestamp."""
+        mock_client = mock_client_factory(sample_epic_response)
+
+        result = _decompose_to_tickets_impl(sample_input_requirements, client=mock_client)
+
+        ts = result["metadata"]["generated_at"]
+        parsed = datetime.fromisoformat(ts)
+        assert parsed is not None

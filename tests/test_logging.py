@@ -100,6 +100,25 @@ class TestStructuredFormatter:
         assert parsed["message"] == "Error occurred"
         assert parsed["level"] == "ERROR"
 
+    def test_json_format_handles_getMessage_failure(self):
+        """Verify formatter returns valid JSON when getMessage() raises."""
+        formatter = StructuredFormatter()
+        record = logging.LogRecord(
+            name="test",
+            level=logging.ERROR,
+            pathname="test.py",
+            lineno=1,
+            msg="Value is %d",
+            args=("not_an_int",),
+            exc_info=None,
+        )
+
+        output = formatter.format(record)
+        parsed = json.loads(output)
+
+        assert parsed["level"] == "ERROR"
+        assert "Value is %d" in parsed["message"]
+
     def test_json_format_empty_correlation_id_when_unset(self):
         """Verify correlation_id is empty string when not set."""
         formatter = StructuredFormatter()
