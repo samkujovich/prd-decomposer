@@ -176,9 +176,13 @@ class TestAmbiguityDetection:
         flags = collect_ambiguity_flags(vague_prd_result)
         vague_flags = [f for f in flags if f["category"] == "vague_quantifier"]
 
-        assert len(vague_flags) > 0, (
+        # Check that "fast" is specifically mentioned in a vague_quantifier flag
+        vague_issues = [f["issue"].lower() for f in vague_flags]
+        has_fast = any("fast" in issue for issue in vague_issues)
+
+        assert has_fast, (
             f"Expected 'fast' to be flagged as vague_quantifier. "
-            f"Got categories: {[f['category'] for f in flags]}"
+            f"Got vague issues: {vague_issues}"
         )
 
     def test_flags_vague_quantifier_scalable(self, vague_prd_result: dict[str, Any]):
