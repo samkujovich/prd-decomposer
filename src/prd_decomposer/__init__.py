@@ -9,6 +9,7 @@ from prd_decomposer.circuit_breaker import (
 from prd_decomposer.config import Settings, get_settings
 from prd_decomposer.export import export_tickets
 from prd_decomposer.models import (
+    AgentContext,
     AmbiguityFlag,
     Epic,
     Requirement,
@@ -30,12 +31,13 @@ from prd_decomposer.prompts import (
 
 __all__ = [
     "ANALYZE_PRD_PROMPT",
-    "DECOMPOSE_TO_TICKETS_PROMPT",
-    "PROMPT_VERSION",
+    "AgentContext",
     "AmbiguityFlag",
     "CircuitBreaker",
     "CircuitBreakerOpenError",
+    "DECOMPOSE_TO_TICKETS_PROMPT",
     "Epic",
+    "PROMPT_VERSION",
     "RateLimitExceededError",
     "RateLimiter",
     "Requirement",

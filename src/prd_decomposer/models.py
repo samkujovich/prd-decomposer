@@ -25,6 +25,36 @@ class AmbiguityFlag(BaseModel):
     )
 
 
+class AgentContext(BaseModel):
+    """AI agent execution context for a story."""
+
+    goal: str = Field(
+        ...,
+        min_length=1,
+        description="The 'why' - what problem this solves and why it matters",
+    )
+    exploration_paths: list[str] = Field(
+        default_factory=list,
+        description="Keywords/concepts to search for during exploration",
+    )
+    exploration_hints: list[str] = Field(
+        default_factory=list,
+        description="Optional specific paths or files to start with if known",
+    )
+    known_patterns: list[str] = Field(
+        default_factory=list,
+        description="Libraries, patterns, or conventions to follow",
+    )
+    verification_tests: list[str] = Field(
+        default_factory=list,
+        description="Test names or patterns that should pass when done",
+    )
+    self_check: list[str] = Field(
+        default_factory=list,
+        description="Questions the agent should verify before marking complete",
+    )
+
+
 class Requirement(BaseModel):
     """A single requirement extracted from a PRD."""
 

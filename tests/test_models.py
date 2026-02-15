@@ -387,3 +387,63 @@ def test_ambiguity_flag_json_roundtrip():
     assert restored.category == "security_concern"
     assert restored.severity == "critical"
     assert "DoS" in restored.suggested_action
+
+
+# AgentContext tests
+
+
+class TestAgentContext:
+    """Tests for AgentContext model."""
+
+    def test_agent_context_requires_goal(self):
+        """AgentContext requires a goal field."""
+        from prd_decomposer.models import AgentContext
+
+        with pytest.raises(ValidationError):
+            AgentContext()
+
+    def test_agent_context_minimal(self):
+        """AgentContext with only required goal field."""
+        from prd_decomposer.models import AgentContext
+
+        ctx = AgentContext(goal="Enable users to reset passwords")
+        assert ctx.goal == "Enable users to reset passwords"
+        assert ctx.exploration_paths == []
+        assert ctx.exploration_hints == []
+        assert ctx.known_patterns == []
+        assert ctx.verification_tests == []
+        assert ctx.self_check == []
+
+    def test_agent_context_full(self):
+        """AgentContext with all fields populated."""
+        from prd_decomposer.models import AgentContext
+
+        ctx = AgentContext(
+            goal="Enable users to reset passwords",
+            exploration_paths=["auth", "email"],
+            exploration_hints=["src/auth/"],
+            known_patterns=["Use JWT tokens"],
+            verification_tests=["test_reset_flow"],
+            self_check=["Is token secure?"],
+        )
+        assert len(ctx.exploration_paths) == 2
+        assert "src/auth/" in ctx.exploration_hints
+
+    def test_agent_context_json_roundtrip(self):
+        """Verify AgentContext survives JSON serialization."""
+        from prd_decomposer.models import AgentContext
+
+        original = AgentContext(
+            goal="Enable password reset",
+            exploration_paths=["auth", "email"],
+            exploration_hints=["src/auth/"],
+            known_patterns=["Use JWT tokens"],
+            verification_tests=["test_reset_flow"],
+            self_check=["Is token secure?"],
+        )
+        json_str = original.model_dump_json()
+        restored = AgentContext.model_validate_json(json_str)
+
+        assert restored.goal == original.goal
+        assert restored.exploration_paths == original.exploration_paths
+        assert restored.self_check == original.self_check
