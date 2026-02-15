@@ -132,7 +132,16 @@ Claude Code implemented AI-optimized ticket output:
 - **CLI Command**: Added `prompt N` command (with `copy N` and `show N` aliases) to agent CLI
 - **CSV Export**: Added `agent_prompt` column to CSV export format
 - **Architecture Fix**: Moved `render_agent_prompt` to server package to maintain proper dependency direction (agent imports from server, not vice versa)
-- **Testing**: Expanded from 243 to 305 tests
+- **Testing**: Expanded from 243 to 306 tests
+
+### Session 11: Export Enhancements & Agent Improvements
+Claude Code enhanced exports and agent behavior:
+- **Jira Export**: Added "AI Implementation Context" section to story descriptions with goal, exploration paths, hints, patterns, verification tests, and self-check questions
+- **YAML Export**: Added full `agent_context` object to story output
+- **Agent Import Fix**: Added try/except to handle both module and script import styles (`from agent.formatters` vs `from formatters`)
+- **Agent Instructions**: Updated to show full agent_context when presenting tickets (all 6 fields: Goal, Exploration paths, Start with, Patterns, Verification, Self-check)
+- **Quality Evals**: Added `TestAgentContextGeneration` class with 5 evals for agent_context output quality
+- **Testing**: Expanded from 306 to 310 tests
 
 ## Prompts Used
 
@@ -164,8 +173,9 @@ This prompt pattern is adapted from the [Agentic Code Reviewer](https://github.c
 ## Quality Assurance
 
 - All AI-generated code was reviewed before committing
-- 305 tests (301 unit + 4 integration) with comprehensive coverage
+- 310 tests (306 unit + 4 integration) with comprehensive coverage
 - Arcade evals validate tool selection (8 eval cases)
+- Output quality evals validate agent_context generation (21 eval cases)
 - Security review for path traversal and injection risks
 - Error handling review for LLM failure scenarios
 - Manual testing with 10 sample PRDs
