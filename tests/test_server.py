@@ -1423,3 +1423,43 @@ class TestSizingRubricBugFix:
             decompose_to_tickets(
                 json.dumps(sample_input_requirements), sizing_rubric=rubric_json
             )
+
+
+class TestAgentContextGeneration:
+    """Tests for agent_context generation in decompose_to_tickets."""
+
+    def test_decompose_generates_agent_context(self, mock_client_factory):
+        """decompose_to_tickets generates agent_context for stories."""
+        mock_response = {
+            "epics": [{
+                "title": "Test Epic",
+                "description": "Desc",
+                "stories": [{
+                    "title": "Test Story",
+                    "description": "Do thing",
+                    "size": "M",
+                    "acceptance_criteria": ["AC1"],
+                    "labels": ["backend"],
+                    "requirement_ids": ["REQ-001"],
+                    "agent_context": {
+                        "goal": "Enable feature X",
+                        "exploration_paths": ["feature"],
+                        "exploration_hints": [],
+                        "known_patterns": [],
+                        "verification_tests": ["test_feature"],
+                        "self_check": ["Does it work?"],
+                    },
+                }],
+                "labels": [],
+            }],
+        }
+        mock_client = mock_client_factory(mock_response)
+
+        result = _decompose_to_tickets_impl(
+            requirements={"requirements": [], "summary": "test", "source_hash": "abc"},
+            client=mock_client,
+        )
+
+        story = result["epics"][0]["stories"][0]
+        assert "agent_context" in story
+        assert story["agent_context"]["goal"] == "Enable feature X"
