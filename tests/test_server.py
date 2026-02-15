@@ -491,7 +491,8 @@ class TestAnalyzePrd:
         assert len(result["source_hash"]) == 8
         assert all(c in "0123456789abcdef" for c in result["source_hash"])
         assert "_metadata" in result
-        assert "usage" in result["_metadata"]
+        # Usage tokens are spread into metadata directly
+        assert "prompt_tokens" in result["_metadata"] or "total_tokens" in result["_metadata"]
         assert "prompt_version" in result["_metadata"]
 
     def test_analyze_prd_generates_source_hash(self, mock_client_factory):
@@ -538,7 +539,7 @@ class TestAnalyzePrd:
         assert flags[0]["issue"] == "'fast' without metrics"
 
     def test_analyze_prd_validates_llm_response(self, mock_client_factory):
-        """Verify analyze_prd raises RuntimeError for invalid LLM response."""
+        """Verify analyze_prd raises LLMError for invalid LLM response."""
         mock_response = {
             "requirements": [
                 {
@@ -552,11 +553,11 @@ class TestAnalyzePrd:
         }
         mock_client = mock_client_factory(mock_response)
 
-        with pytest.raises(RuntimeError, match="LLM returned invalid structure"):
+        with pytest.raises(LLMError, match="LLM returned invalid structure"):
             _analyze_prd_impl("Test PRD", client=mock_client)
 
     def test_analyze_prd_llm_error_propagates(self):
-        """Verify analyze_prd raises RuntimeError when LLM call fails."""
+        """Verify analyze_prd raises LLMError when LLM call fails."""
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = RateLimitError(
             message="Rate limit", response=MagicMock(status_code=429), body=None
@@ -564,7 +565,7 @@ class TestAnalyzePrd:
 
         settings = Settings(initial_retry_delay=0.01)
         with patch("prd_decomposer.server.time.sleep"):
-            with pytest.raises(RuntimeError, match="Failed to analyze PRD"):
+            with pytest.raises(LLMError, match="LLM call failed after"):
                 _analyze_prd_impl("Test PRD", client=mock_client, settings=settings)
 
     def test_analyze_prd_rejects_oversized_input(self):
@@ -573,7 +574,7 @@ class TestAnalyzePrd:
         settings = Settings(max_prd_length=1000)
         mock_client = MagicMock()
 
-        with pytest.raises(ValueError, match="exceeds maximum length"):
+        with pytest.raises(ValueError, match="exceeds limit of"):
             _analyze_prd_impl(oversized_prd, client=mock_client, settings=settings)
 
     def test_analyze_prd_accepts_input_at_max_length(self, mock_client_factory):
@@ -717,12 +718,29 @@ class TestDecomposeToTickets:
 
         assert result["metadata"]["story_count"] == 3
 
-    def test_decompose_to_tickets_validates_input(self):
-        """Verify decompose_to_tickets raises ValueError for invalid input."""
-        invalid_input = {"requirements": [{"id": "REQ-001"}]}
+    def test_decompose_to_tickets_validates_input(self, mock_client_factory):
+        """Verify decompose_to_tickets raises LLMError for invalid LLM response structure."""
+        # Pass valid input, but mock LLM to return invalid story size
+        mock_response = {
+            "epics": [
+                {
+                    "title": "Epic",
+                    "description": "Desc",
+                    "stories": [
+                        {
+                            "title": "Story",
+                            "description": "Desc",
+                            "size": "INVALID",  # Invalid size
+                        }
+                    ],
+                }
+            ]
+        }
+        mock_client = mock_client_factory(mock_response)
+        valid_input = {"requirements": [{"id": "REQ-001", "title": "T", "description": "D"}]}
 
-        with pytest.raises(ValueError, match="Invalid requirements structure"):
-            _decompose_to_tickets_impl(invalid_input, client=MagicMock())
+        with pytest.raises(LLMError, match="LLM returned invalid structure"):
+            _decompose_to_tickets_impl(valid_input, client=mock_client)
 
     @pytest.mark.parametrize("bad_input,match", [
         (None, "cannot be empty"),
@@ -748,7 +766,7 @@ class TestDecomposeToTickets:
     def test_decompose_to_tickets_validates_llm_response(
         self, sample_input_requirements, mock_client_factory
     ):
-        """Verify decompose_to_tickets raises RuntimeError for invalid LLM response."""
+        """Verify decompose_to_tickets raises LLMError for invalid LLM response."""
         mock_response = {
             "epics": [
                 {
@@ -770,16 +788,16 @@ class TestDecomposeToTickets:
         }
         mock_client = mock_client_factory(mock_response)
 
-        with pytest.raises(RuntimeError, match="LLM returned invalid ticket structure"):
+        with pytest.raises(LLMError, match="LLM returned invalid structure"):
             _decompose_to_tickets_impl(sample_input_requirements, client=mock_client)
 
     def test_decompose_to_tickets_llm_missing_epics_key(
         self, sample_input_requirements, mock_client_factory
     ):
-        """Verify decompose raises RuntimeError when LLM omits epics key."""
+        """Verify decompose raises LLMError when LLM omits epics key."""
         mock_client = mock_client_factory({"some_other_key": []})
 
-        with pytest.raises(RuntimeError, match="LLM returned invalid ticket structure"):
+        with pytest.raises(LLMError, match="LLM returned invalid structure"):
             _decompose_to_tickets_impl(sample_input_requirements, client=mock_client)
 
     def test_decompose_to_tickets_string_requirements(
@@ -805,7 +823,7 @@ class TestDecomposeToTickets:
             _decompose_to_tickets_impl("not valid json {", client=MagicMock())
 
     def test_decompose_to_tickets_llm_error_propagates(self, sample_input_requirements):
-        """Verify decompose_to_tickets raises RuntimeError when LLM call fails."""
+        """Verify decompose_to_tickets raises LLMError when LLM call fails."""
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = RateLimitError(
             message="Rate limit", response=MagicMock(status_code=429), body=None
@@ -813,7 +831,7 @@ class TestDecomposeToTickets:
 
         settings = Settings(initial_retry_delay=0.01)
         with patch("prd_decomposer.server.time.sleep"):
-            with pytest.raises(RuntimeError, match="Failed to decompose"):
+            with pytest.raises(LLMError, match="LLM call failed after"):
                 _decompose_to_tickets_impl(
                     sample_input_requirements, client=mock_client, settings=settings
                 )
@@ -1079,7 +1097,7 @@ class TestServerLogging:
         settings = Settings(initial_retry_delay=0.01)
         with caplog.at_level(logging.DEBUG, logger="prd_decomposer"):
             with patch("prd_decomposer.server.time.sleep"):
-                with pytest.raises(RuntimeError):
+                with pytest.raises(LLMError):
                     _analyze_prd_impl("Test PRD", client=mock_client, settings=settings)
 
         messages = [r.message for r in caplog.records]
@@ -1277,65 +1295,35 @@ class TestMetadataTimestamps:
 class TestHealthCheck:
     """Tests for health_check tool."""
 
-    def test_health_check_returns_healthy_when_api_connected(self):
-        """Verify health_check returns healthy status when OpenAI API is connected."""
-        mock_client = MagicMock()
-        mock_client.models.list.return_value = MagicMock(data=[MagicMock(), MagicMock()])
-
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            result = health_check()
+    def test_health_check_returns_healthy_when_closed(self):
+        """Verify health_check returns healthy status when circuit breaker is closed."""
+        result = health_check()
 
         assert result["status"] == "healthy"
-        assert result["checks"]["openai_api"]["status"] == "connected"
-        assert result["checks"]["openai_api"]["models_available"] == 2
-        assert result["checks"]["rate_limiter"]["status"] == "ok"
+        assert result["circuit_breaker"]["state"] == "closed"
         assert "version" in result
         assert "config" in result
 
-    def test_health_check_returns_unhealthy_when_api_fails(self):
-        """Verify health_check returns unhealthy status when OpenAI API fails."""
-        mock_client = MagicMock()
-        mock_client.models.list.side_effect = Exception("API connection failed")
-
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            result = health_check()
-
-        assert result["status"] == "unhealthy"
-        assert result["checks"]["openai_api"]["status"] == "error"
-        assert "API connection failed" in result["checks"]["openai_api"]["error"]
-
     def test_health_check_includes_config_summary(self):
         """Verify health_check returns configuration summary."""
-        mock_client = MagicMock()
-        mock_client.models.list.return_value = MagicMock(data=[])
-
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            result = health_check()
+        result = health_check()
 
         assert "config" in result
-        assert "model" in result["config"]
+        assert "openai_model" in result["config"]
         assert "max_retries" in result["config"]
         assert "llm_timeout" in result["config"]
         assert "max_prd_length" in result["config"]
 
     def test_health_check_includes_rate_limiter_status(self):
         """Verify health_check returns rate limiter status."""
-        mock_client = MagicMock()
-        mock_client.models.list.return_value = MagicMock(data=[])
+        result = health_check()
 
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            result = health_check()
-
-        assert "rate_limiter" in result["checks"]
-        assert "current_calls" in result["checks"]["rate_limiter"]
-        assert "max_calls" in result["checks"]["rate_limiter"]
-        assert "window_seconds" in result["checks"]["rate_limiter"]
+        assert "rate_limiter" in result
+        assert "max_calls" in result["rate_limiter"]
+        assert "window_seconds" in result["rate_limiter"]
 
     def test_health_check_degraded_in_half_open_state(self):
         """Verify health_check returns degraded when circuit breaker is half-open."""
-        mock_client = MagicMock()
-        mock_client.models.list.return_value = MagicMock(data=[])
-
         # Create a circuit breaker in half-open state
         cb = CircuitBreaker(failure_threshold=1, reset_timeout=0.01)
         cb.record_failure()  # Opens circuit
@@ -1343,35 +1331,22 @@ class TestHealthCheck:
         import time
         time.sleep(0.02)  # Wait for half-open
 
-        with (
-            patch("prd_decomposer.server.get_client", return_value=mock_client),
-            patch("prd_decomposer.server.get_circuit_breaker", return_value=cb),
-        ):
+        with patch("prd_decomposer.server.get_circuit_breaker", return_value=cb):
             result = health_check()
 
-        # Both component and top-level should be degraded
-        assert result["checks"]["circuit_breaker"]["status"] == "degraded"
-        assert result["checks"]["circuit_breaker"]["state"] == "half_open"
+        assert result["circuit_breaker"]["state"] == "half_open"
         assert result["status"] == "degraded"
 
     def test_health_check_degraded_in_open_state(self):
         """Verify health_check returns degraded when circuit breaker is open."""
-        mock_client = MagicMock()
-        mock_client.models.list.return_value = MagicMock(data=[])
-
         # Create a circuit breaker in open state
         cb = CircuitBreaker(failure_threshold=1, reset_timeout=60)
         cb.record_failure()  # Opens circuit
 
-        with (
-            patch("prd_decomposer.server.get_client", return_value=mock_client),
-            patch("prd_decomposer.server.get_circuit_breaker", return_value=cb),
-        ):
+        with patch("prd_decomposer.server.get_circuit_breaker", return_value=cb):
             result = health_check()
 
-        # Both component and top-level should be degraded
-        assert result["checks"]["circuit_breaker"]["status"] == "degraded"
-        assert result["checks"]["circuit_breaker"]["state"] == "open"
+        assert result["circuit_breaker"]["state"] == "open"
         assert result["status"] == "degraded"
 
 
@@ -1414,7 +1389,7 @@ class TestExportTickets:
 
     def test_export_to_csv_returns_valid_csv(self, sample_tickets):
         """Verify export_tickets produces valid CSV."""
-        result = export_tickets(json.dumps(sample_tickets), format="csv")
+        result = export_tickets(json.dumps(sample_tickets), output_format="csv")
 
         assert "epic_title,story_title" in result
         assert "User Authentication" in result
@@ -1423,7 +1398,7 @@ class TestExportTickets:
 
     def test_export_to_csv_includes_all_fields(self, sample_tickets):
         """Verify CSV export includes all expected fields."""
-        result = export_tickets(json.dumps(sample_tickets), format="csv")
+        result = export_tickets(json.dumps(sample_tickets), output_format="csv")
         lines = result.strip().split("\n")
 
         # Check header
@@ -1440,7 +1415,7 @@ class TestExportTickets:
 
     def test_export_to_jira_returns_valid_json(self, sample_tickets):
         """Verify export_tickets produces valid Jira API payload."""
-        result = export_tickets(json.dumps(sample_tickets), format="jira")
+        result = export_tickets(json.dumps(sample_tickets), output_format="jira")
         parsed = json.loads(result)
 
         assert "issueUpdates" in parsed
@@ -1448,7 +1423,7 @@ class TestExportTickets:
 
     def test_export_to_jira_maps_priority(self, sample_tickets):
         """Verify Jira export maps priority correctly."""
-        result = export_tickets(json.dumps(sample_tickets), format="jira")
+        result = export_tickets(json.dumps(sample_tickets), output_format="jira")
         parsed = json.loads(result)
 
         # Find a story issue (not epic)
@@ -1461,7 +1436,7 @@ class TestExportTickets:
 
     def test_export_to_jira_no_metadata_in_issues(self, sample_tickets):
         """Verify Jira issues don't contain _prd_decomposer_metadata (breaks Jira API)."""
-        result = export_tickets(json.dumps(sample_tickets), format="jira")
+        result = export_tickets(json.dumps(sample_tickets), output_format="jira")
         parsed = json.loads(result)
 
         # No issue should have _prd_decomposer_metadata
@@ -1477,7 +1452,7 @@ class TestExportTickets:
 
     def test_export_to_yaml_returns_valid_yaml(self, sample_tickets):
         """Verify export_tickets produces valid YAML-like output."""
-        result = export_tickets(json.dumps(sample_tickets), format="yaml")
+        result = export_tickets(json.dumps(sample_tickets), output_format="yaml")
 
         assert "epics:" in result
         assert "title:" in result
@@ -1487,42 +1462,42 @@ class TestExportTickets:
     def test_export_invalid_format_raises(self, sample_tickets):
         """Verify export_tickets raises for invalid format."""
         with pytest.raises(FatalToolError, match="Unsupported format"):
-            export_tickets(json.dumps(sample_tickets), format="xml")
+            export_tickets(json.dumps(sample_tickets), output_format="xml")
 
     def test_export_invalid_json_raises(self):
         """Verify export_tickets raises for invalid JSON input."""
         with pytest.raises(FatalToolError, match="Invalid JSON"):
-            export_tickets("not valid json", format="csv")
+            export_tickets("not valid json", output_format="csv")
 
     def test_export_missing_epics_raises(self):
         """Verify export_tickets raises when epics key missing."""
-        with pytest.raises(FatalToolError, match="missing 'epics'"):
-            export_tickets('{"stories": []}', format="csv")
+        with pytest.raises(FatalToolError, match=r"epics.*Field required"):
+            export_tickets('{"stories": []}', output_format="csv")
 
     def test_export_array_json_raises(self):
         """Verify export_tickets raises for JSON array input."""
         with pytest.raises(FatalToolError, match="must be a JSON object"):
-            export_tickets('[{"title": "Epic"}]', format="csv")
+            export_tickets('[{"title": "Epic"}]', output_format="csv")
 
     def test_export_string_json_raises(self):
         """Verify export_tickets raises for JSON string input."""
         with pytest.raises(FatalToolError, match="must be a JSON object"):
-            export_tickets('"just a string"', format="csv")
+            export_tickets('"just a string"', output_format="csv")
 
     def test_export_number_json_raises(self):
         """Verify export_tickets raises for JSON number input."""
         with pytest.raises(FatalToolError, match="must be a JSON object"):
-            export_tickets('123', format="csv")
+            export_tickets('123', output_format="csv")
 
     def test_export_epics_not_list_raises(self):
         """Verify export_tickets raises when epics is not a list."""
-        with pytest.raises(FatalToolError, match="'epics' must be a list"):
-            export_tickets('{"epics": "not a list"}', format="csv")
+        with pytest.raises(FatalToolError, match=r"epics.*Input should be a valid list"):
+            export_tickets('{"epics": "not a list"}', output_format="csv")
 
     def test_export_epics_contains_non_object_raises(self):
         """Verify export_tickets raises when epics contains non-objects."""
-        with pytest.raises(FatalToolError, match=r"epics\[0\] must be an object"):
-            export_tickets('{"epics": ["string instead of object"]}', format="csv")
+        with pytest.raises(FatalToolError, match=r"epics\.0.*Input should be a valid dictionary"):
+            export_tickets('{"epics": ["string instead of object"]}', output_format="csv")
 
     def test_export_epics_mixed_types_raises(self):
         """Verify export_tickets raises for mixed types in epics array."""
@@ -1532,8 +1507,8 @@ class TestExportTickets:
                 123,  # Invalid - not an object
             ]
         }
-        with pytest.raises(FatalToolError, match=r"epics\[1\] must be an object"):
-            export_tickets(json.dumps(tickets), format="csv")
+        with pytest.raises(FatalToolError, match=r"epics\.1.*Input should be a valid dictionary"):
+            export_tickets(json.dumps(tickets), output_format="csv")
 
     def test_export_stories_not_list_raises(self):
         """Verify export_tickets raises when stories is not a list."""
@@ -1542,8 +1517,8 @@ class TestExportTickets:
                 {"title": "Epic", "description": "D", "labels": [], "stories": "not a list"}
             ]
         }
-        with pytest.raises(FatalToolError, match=r"epics\[0\].stories must be a list"):
-            export_tickets(json.dumps(tickets), format="csv")
+        with pytest.raises(FatalToolError, match=r"epics\.0\.stories.*Input should be a valid list"):
+            export_tickets(json.dumps(tickets), output_format="csv")
 
     def test_export_story_not_object_raises(self):
         """Verify export_tickets raises when story is not an object."""
@@ -1557,8 +1532,8 @@ class TestExportTickets:
                 }
             ]
         }
-        with pytest.raises(FatalToolError, match=r"epics\[0\].stories\[0\] must be an object"):
-            export_tickets(json.dumps(tickets), format="csv")
+        with pytest.raises(FatalToolError, match=r"epics\.0\.stories\.0.*Input should be a valid dictionary"):
+            export_tickets(json.dumps(tickets), output_format="csv")
 
     def test_export_mixed_story_types_raises(self):
         """Verify export_tickets raises for mixed types in stories array."""
@@ -1575,8 +1550,8 @@ class TestExportTickets:
                 }
             ]
         }
-        with pytest.raises(FatalToolError, match=r"epics\[0\].stories\[1\] must be an object"):
-            export_tickets(json.dumps(tickets), format="csv")
+        with pytest.raises(FatalToolError, match=r"epics\.0\.stories\.1.*Input should be a valid dictionary"):
+            export_tickets(json.dumps(tickets), output_format="csv")
 
 
 class TestCircuitBreaker:
@@ -1586,7 +1561,7 @@ class TestCircuitBreaker:
         """Verify new circuit breaker is in closed state."""
         cb = CircuitBreaker()
         assert cb.state == "closed"
-        assert cb.allow_request() is True
+        assert cb.allow_request() == "closed"
 
     def test_circuit_breaker_opens_after_threshold(self):
         """Verify circuit opens after failure threshold exceeded."""
@@ -1639,7 +1614,7 @@ class TestCircuitBreaker:
         import time
         time.sleep(0.02)
 
-        assert cb.allow_request() is True
+        assert cb.allow_request() == "half_open"
         # Second request should be blocked
         with pytest.raises(CircuitBreakerOpenError):
             cb.allow_request()
@@ -1745,16 +1720,11 @@ class TestCircuitBreakerIntegration:
 
     def test_health_check_includes_circuit_breaker(self):
         """Verify health_check includes circuit breaker status."""
-        with patch("prd_decomposer.server.get_client") as mock_get_client:
-            mock_client = MagicMock()
-            mock_client.models.list.return_value = MagicMock(data=[])
-            mock_get_client.return_value = mock_client
+        result = health_check()
 
-            result = health_check()
-
-            assert "circuit_breaker" in result["checks"]
-            assert result["checks"]["circuit_breaker"]["state"] == "closed"
-            assert "circuit_breaker_failure_threshold" in result["config"]
+        assert "circuit_breaker" in result
+        assert result["circuit_breaker"]["state"] == "closed"
+        assert "circuit_breaker_failure_threshold" in result["config"]
 
     def test_get_circuit_breaker_returns_singleton(self):
         """Verify get_circuit_breaker returns same instance."""
@@ -2056,26 +2026,26 @@ class TestJiraPriorityMapping:
 
     def test_map_priority_non_string_int(self):
         """Verify _map_priority_to_jira coerces int to string."""
-        from prd_decomposer.server import _map_priority_to_jira
+        from prd_decomposer.export import _map_priority_to_jira
         # Integer priority should be coerced to string
         result = _map_priority_to_jira(1)
         assert result == "Medium"  # Falls through to default since "1" isn't a valid key
 
     def test_map_priority_non_string_none(self):
         """Verify _map_priority_to_jira handles None."""
-        from prd_decomposer.server import _map_priority_to_jira
+        from prd_decomposer.export import _map_priority_to_jira
         result = _map_priority_to_jira(None)
         assert result == "Medium"
 
     def test_map_priority_non_string_bool(self):
         """Verify _map_priority_to_jira coerces bool to string."""
-        from prd_decomposer.server import _map_priority_to_jira
+        from prd_decomposer.export import _map_priority_to_jira
         result = _map_priority_to_jira(True)
         assert result == "Medium"  # Falls through to default
 
     def test_map_priority_valid_strings(self):
         """Verify _map_priority_to_jira handles valid string priorities."""
-        from prd_decomposer.server import _map_priority_to_jira
+        from prd_decomposer.export import _map_priority_to_jira
         assert _map_priority_to_jira("high") == "High"
         assert _map_priority_to_jira("HIGH") == "High"
         assert _map_priority_to_jira("medium") == "Medium"
@@ -2086,38 +2056,8 @@ class TestJiraPriorityMapping:
 class TestNestedFieldValidation:
     """Tests for nested story field validation in export."""
 
-    def test_validate_string_list_with_integers(self):
-        """Verify _validate_string_list coerces integers to strings."""
-        from prd_decomposer.server import _validate_string_list
-        result = _validate_string_list([1, 2, 3], "labels", "story[0]")
-        assert result == ["1", "2", "3"]
-
-    def test_validate_string_list_with_none_items(self):
-        """Verify _validate_string_list filters out None items."""
-        from prd_decomposer.server import _validate_string_list
-        result = _validate_string_list(["a", None, "b"], "labels", "story[0]")
-        assert result == ["a", "b"]
-
-    def test_validate_string_list_with_mixed_types(self):
-        """Verify _validate_string_list handles mixed types."""
-        from prd_decomposer.server import _validate_string_list
-        result = _validate_string_list(["a", 1, True, "b"], "labels", "story[0]")
-        assert result == ["a", "1", "True", "b"]
-
-    def test_validate_string_list_raises_for_non_list(self):
-        """Verify _validate_string_list raises for non-list value."""
-        from prd_decomposer.server import _validate_string_list
-        with pytest.raises(ValueError, match="must be a list"):
-            _validate_string_list("not a list", "labels", "story[0]")
-
-    def test_validate_string_list_handles_none(self):
-        """Verify _validate_string_list handles None input."""
-        from prd_decomposer.server import _validate_string_list
-        result = _validate_string_list(None, "labels", "story[0]")
-        assert result == []
-
-    def test_export_with_integer_labels(self):
-        """Verify export handles stories with integer labels."""
+    def test_export_with_integer_labels_raises(self):
+        """Verify export rejects stories with integer labels (Pydantic validation)."""
         tickets = {
             "epics": [
                 {
@@ -2129,7 +2069,7 @@ class TestNestedFieldValidation:
                             "title": "Story",
                             "description": "Desc",
                             "acceptance_criteria": ["AC1"],
-                            "labels": [123, "valid-label"],  # Integer in labels
+                            "labels": [123, "valid-label"],  # Integer in labels - rejected by Pydantic
                             "size": "S",
                             "requirement_ids": ["REQ-001"],
                         }
@@ -2137,10 +2077,9 @@ class TestNestedFieldValidation:
                 }
             ]
         }
-        # Should not crash - integers coerced to strings
-        result = export_tickets(json.dumps(tickets), format="csv")
-        assert "123" in result
-        assert "valid-label" in result
+        # Pydantic rejects integer labels - they must be strings
+        with pytest.raises(FatalToolError, match="Input should be a valid string"):
+            export_tickets(json.dumps(tickets), output_format="csv")
 
 
 class TestCircuitBreaker4xxInClosedState:
@@ -2215,64 +2154,25 @@ class TestCircuitBreaker4xxInClosedState:
 
 
 class TestScalarFieldValidation:
-    """Tests for scalar string field validation in export."""
+    """Tests for scalar string field validation in export (via Pydantic)."""
 
-    def test_validate_string_field_with_string(self):
-        """Verify _validate_string_field returns strings unchanged."""
-        from prd_decomposer.server import _validate_string_field
-        result = _validate_string_field("hello", "title", "epic[0]")
-        assert result == "hello"
-
-    def test_validate_string_field_with_integer(self):
-        """Verify _validate_string_field coerces integers to strings."""
-        from prd_decomposer.server import _validate_string_field
-        result = _validate_string_field(123, "title", "epic[0]")
-        assert result == "123"
-
-    def test_validate_string_field_with_bool(self):
-        """Verify _validate_string_field coerces bools to strings."""
-        from prd_decomposer.server import _validate_string_field
-        result = _validate_string_field(True, "title", "epic[0]")
-        assert result == "True"
-
-    def test_validate_string_field_required_none_raises(self):
-        """Verify _validate_string_field raises for required None field."""
-        from prd_decomposer.server import _validate_string_field
-        with pytest.raises(ValueError, match="is required"):
-            _validate_string_field(None, "title", "epic[0]", required=True)
-
-    def test_validate_string_field_optional_none_returns_empty(self):
-        """Verify _validate_string_field returns empty string for optional None."""
-        from prd_decomposer.server import _validate_string_field
-        result = _validate_string_field(None, "description", "epic[0]", required=False)
-        assert result == ""
-
-    def test_export_with_integer_title_coerces(self):
-        """Verify export coerces integer title to string."""
+    def test_export_with_integer_title_rejected(self):
+        """Verify export rejects integer title (Pydantic requires string)."""
         tickets = {
             "epics": [
                 {
-                    "title": 12345,  # Integer instead of string
+                    "title": 12345,  # Integer instead of string - rejected by Pydantic
                     "description": "Desc",
                     "labels": [],
-                    "stories": [
-                        {
-                            "title": "Story",
-                            "description": "Desc",
-                            "acceptance_criteria": [],
-                            "labels": [],
-                            "size": "S",
-                            "requirement_ids": [],
-                        }
-                    ],
+                    "stories": [],
                 }
             ]
         }
-        result = export_tickets(json.dumps(tickets), format="csv")
-        assert "12345" in result  # Epic title coerced to string
+        with pytest.raises(FatalToolError, match="Input should be a valid string"):
+            export_tickets(json.dumps(tickets), output_format="csv")
 
-    def test_export_with_integer_story_title_coerces(self):
-        """Verify export coerces integer story title to string."""
+    def test_export_with_integer_story_title_rejected(self):
+        """Verify export rejects integer story title (Pydantic requires string)."""
         tickets = {
             "epics": [
                 {
@@ -2281,7 +2181,7 @@ class TestScalarFieldValidation:
                     "labels": [],
                     "stories": [
                         {
-                            "title": 99999,  # Integer instead of string
+                            "title": 99999,  # Integer instead of string - rejected
                             "description": "Story desc",
                             "acceptance_criteria": [],
                             "labels": [],
@@ -2292,8 +2192,8 @@ class TestScalarFieldValidation:
                 }
             ]
         }
-        result = export_tickets(json.dumps(tickets), format="csv")
-        assert "99999" in result
+        with pytest.raises(FatalToolError, match="Input should be a valid string"):
+            export_tickets(json.dumps(tickets), output_format="csv")
 
     def test_export_with_missing_title_raises(self):
         """Verify export raises for missing required title."""
@@ -2307,23 +2207,23 @@ class TestScalarFieldValidation:
                 }
             ]
         }
-        with pytest.raises(FatalToolError, match="title is required"):
-            export_tickets(json.dumps(tickets), format="csv")
+        with pytest.raises(FatalToolError, match=r"title.*Field required"):
+            export_tickets(json.dumps(tickets), output_format="csv")
 
-    def test_export_with_null_description_allowed(self):
-        """Verify export allows null description (optional field)."""
+    def test_export_with_missing_description_uses_default(self):
+        """Verify export accepts missing description (uses default empty string)."""
         tickets = {
             "epics": [
                 {
                     "title": "Epic",
-                    "description": None,  # Null is allowed for optional field
+                    # description omitted - defaults to ""
                     "labels": [],
                     "stories": [],
                 }
             ]
         }
-        # Should not raise - use YAML format which shows epic titles
-        result = export_tickets(json.dumps(tickets), format="yaml")
+        # Should not raise - missing description uses default
+        result = export_tickets(json.dumps(tickets), output_format="yaml")
         assert "Epic" in result
 
     def test_export_with_empty_title_raises(self):
@@ -2331,15 +2231,15 @@ class TestScalarFieldValidation:
         tickets = {
             "epics": [
                 {
-                    "title": "",  # Empty string should fail
+                    "title": "",  # Empty string should fail (min_length=1)
                     "description": "Desc",
                     "labels": [],
                     "stories": [],
                 }
             ]
         }
-        with pytest.raises(FatalToolError, match="cannot be empty"):
-            export_tickets(json.dumps(tickets), format="csv")
+        with pytest.raises(FatalToolError, match=r"title.*String should have at least 1 character"):
+            export_tickets(json.dumps(tickets), output_format="csv")
 
 
 class TestShutdownCircuitBreaker:
@@ -2377,10 +2277,10 @@ class TestShutdownCircuitBreaker:
 
 
 class TestYAMLSizePriorityEscaping:
-    """Tests for YAML size/priority escaping."""
+    """Tests for YAML size/priority validation."""
 
-    def test_yaml_size_is_escaped(self):
-        """Verify size field is properly escaped in YAML."""
+    def test_yaml_invalid_size_rejected(self):
+        """Verify invalid size values are rejected by Pydantic validation."""
         tickets = {
             "epics": [
                 {
@@ -2393,7 +2293,7 @@ class TestYAMLSizePriorityEscaping:
                             "description": "Desc",
                             "acceptance_criteria": [],
                             "labels": [],
-                            "size": 'S"pecial',  # Special chars in size
+                            "size": 'invalid',  # Not S, M, or L
                             "priority": "medium",
                             "requirement_ids": [],
                         }
@@ -2401,12 +2301,12 @@ class TestYAMLSizePriorityEscaping:
                 }
             ]
         }
-        result = export_tickets(json.dumps(tickets), format="yaml")
-        # Size should be quoted and escaped
-        assert 'size: "S\\"pecial"' in result
+        # Pydantic validates size must be S, M, or L
+        with pytest.raises(FatalToolError, match=r"size.*Input should be 'S', 'M' or 'L'"):
+            export_tickets(json.dumps(tickets), output_format="yaml")
 
-    def test_yaml_priority_is_escaped(self):
-        """Verify priority field is properly escaped in YAML."""
+    def test_yaml_invalid_priority_rejected(self):
+        """Verify invalid priority values are rejected by Pydantic validation."""
         tickets = {
             "epics": [
                 {
@@ -2420,94 +2320,89 @@ class TestYAMLSizePriorityEscaping:
                             "acceptance_criteria": [],
                             "labels": [],
                             "size": "M",
-                            "priority": "high\ninjection",  # Newline in priority
+                            "priority": "invalid",  # Not high, medium, or low
                             "requirement_ids": [],
                         }
                     ],
                 }
             ]
         }
-        result = export_tickets(json.dumps(tickets), format="yaml")
-        # Priority should be quoted and newline escaped
-        assert 'priority: "high\\ninjection"' in result
+        # Pydantic validates priority must be high, medium, or low
+        with pytest.raises(FatalToolError, match=r"priority.*Input should be"):
+            export_tickets(json.dumps(tickets), output_format="yaml")
 
 
 class TestNullStoriesHandling:
-    """Tests for null stories array handling in export."""
+    """Tests for null stories array handling in export (Pydantic validation)."""
 
-    def test_export_with_null_stories_csv(self):
-        """Verify export handles null stories in CSV format."""
+    def test_export_with_null_stories_rejected(self):
+        """Verify export rejects null stories (Pydantic requires list)."""
         tickets = {
             "epics": [
                 {
                     "title": "Epic",
                     "description": "Desc",
                     "labels": [],
-                    "stories": None,  # null instead of []
+                    "stories": None,  # null is rejected by Pydantic
                 }
             ]
         }
-        # Should not crash - null normalized to []
-        result = export_tickets(json.dumps(tickets), format="csv")
+        # Pydantic rejects null for list fields
+        with pytest.raises(FatalToolError, match=r"stories.*Input should be a valid list"):
+            export_tickets(json.dumps(tickets), output_format="csv")
+
+    def test_export_with_missing_stories_uses_default(self):
+        """Verify export accepts missing stories (uses default empty list)."""
+        tickets = {
+            "epics": [
+                {
+                    "title": "Epic",
+                    "description": "Desc",
+                    "labels": [],
+                    # stories key omitted - defaults to []
+                }
+            ]
+        }
+        # Missing stories should use default empty list
+        result = export_tickets(json.dumps(tickets), output_format="csv")
         assert "epic_title" in result  # Header should be present
 
-    def test_export_with_null_stories_jira(self):
-        """Verify export handles null stories in Jira format."""
+    def test_export_with_empty_stories_works(self):
+        """Verify export handles empty stories array."""
         tickets = {
             "epics": [
                 {
                     "title": "Epic",
                     "description": "Desc",
                     "labels": [],
-                    "stories": None,  # null instead of []
+                    "stories": [],  # Empty list is valid
                 }
             ]
         }
-        # Should not crash
-        result = export_tickets(json.dumps(tickets), format="jira")
-        parsed = json.loads(result)
-        # Should have epic issue only
-        assert len(parsed["issueUpdates"]) == 1
-
-    def test_export_with_null_stories_yaml(self):
-        """Verify export handles null stories in YAML format."""
-        tickets = {
-            "epics": [
-                {
-                    "title": "Epic",
-                    "description": "Desc",
-                    "labels": [],
-                    "stories": None,  # null instead of []
-                }
-            ]
-        }
-        # Should not crash
-        result = export_tickets(json.dumps(tickets), format="yaml")
-        assert "stories: []" in result  # Normalized to empty list
+        result = export_tickets(json.dumps(tickets), output_format="yaml")
+        assert "stories:" in result
 
 
-class TestYAMLExportBugFix:
-    """Test for YAML export bug fix."""
+class TestYAMLExportWithPyyaml:
+    """Tests for YAML export using pyyaml serialization."""
 
     def test_yaml_export_single_epics_key(self):
-        """Verify YAML export only has one epics: key (bug fix #3)."""
+        """Verify YAML export only has one epics: key."""
         tickets = {
             "epics": [
                 {"title": "Epic 1", "description": "Desc 1", "labels": [], "stories": []},
                 {"title": "Epic 2", "description": "Desc 2", "labels": [], "stories": []},
             ]
         }
-        from prd_decomposer.server import _export_to_yaml
-        result = _export_to_yaml(tickets)
+        result = export_tickets(json.dumps(tickets), output_format="yaml")
 
         # Count occurrences of "epics:" at start of line
         lines = result.split("\n")
         epics_count = sum(1 for line in lines if line.strip() == "epics:")
         assert epics_count == 1, f"Expected 1 'epics:' key, found {epics_count}"
 
-    def test_yaml_export_escapes_quotes(self):
-        """Verify YAML export escapes double quotes in text."""
-        from prd_decomposer.server import _export_to_yaml
+    def test_yaml_export_handles_quotes(self):
+        """Verify YAML export handles double quotes in text (pyyaml)."""
         tickets = {
             "epics": [
                 {
@@ -2518,13 +2413,13 @@ class TestYAMLExportBugFix:
                 }
             ]
         }
-        result = _export_to_yaml(tickets)
-        assert r'\"quotes\"' in result
-        assert r'\"hello\"' in result
+        result = export_tickets(json.dumps(tickets), output_format="yaml")
+        # pyyaml handles quoting - just verify the content is present
+        assert "quotes" in result
+        assert "hello" in result
 
-    def test_yaml_export_escapes_newlines(self):
-        """Verify YAML export escapes newlines in text."""
-        from prd_decomposer.server import _export_to_yaml
+    def test_yaml_export_handles_newlines(self):
+        """Verify YAML export handles newlines in text (pyyaml)."""
         tickets = {
             "epics": [
                 {
@@ -2545,68 +2440,13 @@ class TestYAMLExportBugFix:
                 }
             ]
         }
-        result = _export_to_yaml(tickets)
-        # Escaped newlines should appear as literal \n in the output
-        assert "\\n" in result
-        # No actual newlines within quoted strings (split on newlines, check values)
-        for line in result.split("\n"):
-            if "description:" in line:
-                # The description value should not have raw newline
-                assert "\nLine" not in line
+        result = export_tickets(json.dumps(tickets), output_format="yaml")
+        # pyyaml uses block scalar or escaped newlines - just verify export works
+        assert "Multi-line" in result
+        assert "Story" in result
 
-    def test_yaml_export_escapes_backslashes(self):
-        """Verify YAML export escapes backslashes in text."""
-        from prd_decomposer.server import _export_to_yaml
-        tickets = {
-            "epics": [
-                {
-                    "title": r"Path: C:\Users\test",
-                    "description": r"Use \n for newline",
-                    "labels": [],
-                    "stories": [],
-                }
-            ]
-        }
-        result = _export_to_yaml(tickets)
-        # Backslashes should be doubled: \ → \\
-        # Input has 2 backslashes (C:\Users\test), output should have 4 (C:\\Users\\test)
-        assert "C:\\\\Users\\\\test" in result
-        # Literal \n in input should become \\n (escaped backslash + n, not newline)
-        assert "\\\\n" in result
-
-    def test_escape_yaml_string_function(self):
-        """Test the _escape_yaml_string helper directly."""
-        from prd_decomposer.server import _escape_yaml_string
-
-        # Double quotes
-        assert _escape_yaml_string('say "hi"') == r'say \"hi\"'
-        # Newlines
-        assert _escape_yaml_string("a\nb") == r"a\nb"
-        # Tabs
-        assert _escape_yaml_string("a\tb") == r"a\tb"
-        # Backslashes (escaped first)
-        assert _escape_yaml_string(r"a\b") == r"a\\b"
-        # Combined
-        assert _escape_yaml_string('"\n\\') == r'\"' + r"\n" + r"\\"
-
-    def test_yaml_flow_list_function(self):
-        """Test the _yaml_flow_list helper directly."""
-        from prd_decomposer.server import _yaml_flow_list
-
-        # Empty list
-        assert _yaml_flow_list([]) == "[]"
-        # Simple items
-        assert _yaml_flow_list(["a", "b"]) == '["a", "b"]'
-        # Items with commas (would break naive join)
-        assert _yaml_flow_list(["foo, bar", "baz"]) == '["foo, bar", "baz"]'
-        # Items with colons
-        assert _yaml_flow_list(["key: value"]) == '["key: value"]'
-        # Items with quotes
-        assert _yaml_flow_list(['say "hi"']) == r'["say \"hi\""]'
-
-    def test_yaml_export_labels_with_special_chars(self):
-        """Verify YAML export properly quotes labels with special characters."""
-        from prd_decomposer.server import _export_to_yaml
+    def test_yaml_export_handles_special_chars_in_labels(self):
+        """Verify YAML export handles special characters in labels (pyyaml)."""
         tickets = {
             "epics": [
                 {
@@ -2627,73 +2467,25 @@ class TestYAMLExportBugFix:
                 }
             ]
         }
-        result = _export_to_yaml(tickets)
-        # Each label should be individually quoted
-        assert '"foo, bar"' in result
-        assert '"key: value"' in result
-        assert '"has, comma"' in result
-        assert '"REQ: 001"' in result
+        result = export_tickets(json.dumps(tickets), output_format="yaml")
+        # pyyaml quotes strings with special chars - verify content present
+        assert "foo, bar" in result
+        assert "key: value" in result
+        assert "has, comma" in result
+        assert "REQ: 001" in result
 
-    def test_yaml_export_empty_epics_uses_empty_list(self):
-        """Verify YAML export uses [] for empty epics, not null."""
-        from prd_decomposer.server import _export_to_yaml
+    def test_yaml_export_empty_epics(self):
+        """Verify YAML export handles empty epics list."""
         tickets = {"epics": []}
-        result = _export_to_yaml(tickets)
-        assert "epics: []" in result
-        # Should not have just "epics:" with nothing following
-        assert "epics:\n" not in result
-
-    def test_yaml_export_empty_stories_uses_empty_list(self):
-        """Verify YAML export uses [] for empty stories, not null."""
-        from prd_decomposer.server import _export_to_yaml
-        tickets = {
-            "epics": [
-                {"title": "Epic", "description": "Desc", "labels": [], "stories": []}
-            ]
-        }
-        result = _export_to_yaml(tickets)
-        assert "stories: []" in result
-        # Should not have dangling "stories:" with no items
-        lines = result.split("\n")
-        for i, line in enumerate(lines):
-            if line.strip() == "stories:":
-                # If stories: is followed by an empty line or end, it's wrong
-                next_line = lines[i + 1] if i + 1 < len(lines) else ""
-                assert next_line.strip().startswith("-"), "stories: should have items or be []"
-
-    def test_yaml_export_empty_acceptance_criteria_uses_empty_list(self):
-        """Verify YAML export uses [] for empty acceptance_criteria."""
-        from prd_decomposer.server import _export_to_yaml
-        tickets = {
-            "epics": [
-                {
-                    "title": "Epic",
-                    "description": "Desc",
-                    "labels": [],
-                    "stories": [
-                        {
-                            "title": "Story",
-                            "description": "Desc",
-                            "size": "S",
-                            "priority": "medium",
-                            "labels": [],
-                            "requirement_ids": [],
-                            "acceptance_criteria": [],
-                        }
-                    ],
-                }
-            ]
-        }
-        result = _export_to_yaml(tickets)
-        assert "acceptance_criteria: []" in result
+        result = export_tickets(json.dumps(tickets), output_format="yaml")
+        assert "epics:" in result
 
 
 class TestSizingRubricBugFix:
     """Test for sizing rubric validation bug fix."""
 
-    def test_sizing_rubric_without_labels(self):
-        """Verify sizing rubric works without explicit labels (bug fix #4)."""
-        # This format matches the documented API (no labels)
+    def test_sizing_rubric_accepts_standard_format(self):
+        """Verify sizing rubric works with standard format (duration, scope, risk)."""
         rubric_data = {
             "small": {"duration": "4h", "scope": "tiny", "risk": "none"},
             "medium": {"duration": "2d", "scope": "small", "risk": "low"},
@@ -2701,18 +2493,18 @@ class TestSizingRubricBugFix:
         }
         rubric = SizingRubric(**rubric_data)
 
-        # Labels should be auto-filled
-        assert rubric.small.label == "S"
-        assert rubric.medium.label == "M"
-        assert rubric.large.label == "L"
+        # Verify fields are set correctly
+        assert rubric.small.duration == "4h"
+        assert rubric.medium.scope == "small"
+        assert rubric.large.risk == "high"
 
     def test_decompose_with_documented_rubric_format(
         self, sample_input_requirements, mock_client_factory, sample_epic_response
     ):
-        """Verify decompose_to_tickets accepts documented rubric format (bug fix #4)."""
+        """Verify decompose_to_tickets accepts documented rubric format."""
         mock_client = mock_client_factory(sample_epic_response)
 
-        # Format exactly as documented in tool annotation (no labels)
+        # Format exactly as documented in tool annotation
         rubric_json = json.dumps({
             "small": {"duration": "4h", "scope": "tiny", "risk": "none"},
             "medium": {"duration": "2d", "scope": "small", "risk": "low"},

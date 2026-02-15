@@ -67,7 +67,7 @@ class Story(BaseModel):
     """A Jira-compatible story."""
 
     title: str = Field(..., min_length=1, description="Story title")
-    description: str = Field(..., min_length=1, description="Story description")
+    description: str = Field(default="", description="Story description")
     acceptance_criteria: list[str] = Field(
         default_factory=list, description="Acceptance criteria for the story"
     )
@@ -85,7 +85,7 @@ class Epic(BaseModel):
     """A Jira-compatible epic containing stories."""
 
     title: str = Field(..., min_length=1, description="Epic title")
-    description: str = Field(..., min_length=1, description="Epic description")
+    description: str = Field(default="", description="Epic description")
     stories: list[Story] = Field(default_factory=list, description="Child stories")
     labels: list[str] = Field(default_factory=list, description="Labels/tags")
 
@@ -102,9 +102,6 @@ class TicketCollection(BaseModel):
 class SizeDefinition(BaseModel):
     """Definition of a single t-shirt size for story estimation."""
 
-    label: Literal["S", "M", "L"] | None = Field(
-        default=None, description="Size label (auto-filled by SizingRubric if not provided)"
-    )
     duration: str = Field(..., min_length=1, description="Expected duration (e.g., 'Less than 1 day')")
     scope: str = Field(..., min_length=1, description="Scope description (e.g., 'Single component')")
     risk: str = Field(..., min_length=1, description="Risk level (e.g., 'Low risk')")
@@ -115,7 +112,6 @@ class SizingRubric(BaseModel):
 
     small: SizeDefinition = Field(
         default_factory=lambda: SizeDefinition(
-            label="S",
             duration="Less than 1 day",
             scope="Single component",
             risk="Low risk",
@@ -124,7 +120,6 @@ class SizingRubric(BaseModel):
     )
     medium: SizeDefinition = Field(
         default_factory=lambda: SizeDefinition(
-            label="M",
             duration="1-3 days",
             scope="May touch multiple components",
             risk="Moderate complexity",
@@ -133,24 +128,12 @@ class SizingRubric(BaseModel):
     )
     large: SizeDefinition = Field(
         default_factory=lambda: SizeDefinition(
-            label="L",
             duration="3-5 days",
             scope="Significant complexity",
             risk="Unknowns or cross-team coordination",
         ),
         description="Definition for Large stories",
     )
-
-    @model_validator(mode="after")
-    def auto_fill_labels(self) -> "SizingRubric":
-        """Auto-fill labels based on field name if not provided."""
-        if self.small.label is None:
-            self.small.label = "S"
-        if self.medium.label is None:
-            self.medium.label = "M"
-        if self.large.label is None:
-            self.large.label = "L"
-        return self
 
     def to_prompt_text(self) -> str:
         """Format rubric as text for prompt injection."""

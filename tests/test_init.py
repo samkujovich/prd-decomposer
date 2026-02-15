@@ -4,14 +4,22 @@ import prd_decomposer
 
 EXPECTED_EXPORTS = {
     "ANALYZE_PRD_PROMPT",
+    "AmbiguityFlag",
+    "CircuitBreaker",
+    "CircuitBreakerOpenError",
     "DECOMPOSE_TO_TICKETS_PROMPT",
-    "PROMPT_VERSION",
     "Epic",
+    "PROMPT_VERSION",
+    "RateLimiter",
+    "RateLimitExceededError",
     "Requirement",
     "Settings",
+    "SizeDefinition",
+    "SizingRubric",
     "Story",
     "StructuredRequirements",
     "TicketCollection",
+    "export_tickets",
     "get_settings",
 }
 

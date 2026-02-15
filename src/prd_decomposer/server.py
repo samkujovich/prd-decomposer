@@ -1,9 +1,7 @@
 """MCP server for PRD analysis and decomposition."""
 
 import atexit
-import csv
 import hashlib
-import io
 import json
 import logging
 import random
@@ -19,7 +17,22 @@ from arcade_mcp_server import MCPApp
 from openai import APIConnectionError, APIError, APITimeoutError, OpenAI, RateLimitError
 from pydantic import ValidationError
 
+from prd_decomposer.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerOpenError,
+    RateLimiter,
+    RateLimitExceededError,
+)
 from prd_decomposer.config import Settings, get_settings
+
+# Re-export for backwards compatibility - used by tests
+__all__ = [
+    "CircuitBreaker",
+    "CircuitBreakerOpenError",
+    "RateLimitExceededError",
+    "RateLimiter",
+]
+from prd_decomposer.export import export_tickets as _export_tickets_impl
 from prd_decomposer.log import correlation_id, setup_logging
 from prd_decomposer.models import SizingRubric, StructuredRequirements, TicketCollection
 from prd_decomposer.prompts import (
@@ -76,10 +89,11 @@ def _shutdown_handler(signum: int, frame: object) -> None:
 def _cleanup() -> None:
     """Cleanup resources on exit."""
     # Reset global singletons - no logging here as stream may be closed
-    global _client, _rate_limiter, _circuit_breaker
+    global _client, _rate_limiter, _circuit_breaker, _logging_initialized
     _client = None
     _rate_limiter = None
     _circuit_breaker = None
+    _logging_initialized = False  # Reset so logging can be re-initialized
 
 
 # Register signal handlers and cleanup
@@ -97,204 +111,6 @@ class LLMError(Exception):
     """Raised when LLM call fails after retries."""
 
     pass
-
-
-class RateLimitExceededError(Exception):
-    """Raised when rate limit is exceeded."""
-
-    pass
-
-
-class CircuitBreakerOpenError(Exception):
-    """Raised when circuit breaker is open and rejecting calls."""
-
-    def __init__(self, message: str, retry_after: float):
-        super().__init__(message)
-        self.retry_after = retry_after
-
-
-class CircuitBreaker:
-    """Thread-safe circuit breaker for LLM calls.
-
-    Prevents cascading failures by tracking consecutive errors and
-    temporarily blocking calls when the failure threshold is exceeded.
-
-    States:
-    - CLOSED: Normal operation, calls allowed
-    - OPEN: Blocking calls after threshold failures
-    - HALF_OPEN: Testing with single call after reset timeout
-    """
-
-    def __init__(
-        self,
-        failure_threshold: int = 5,
-        reset_timeout: float = 60.0,
-        half_open_max_calls: int = 1,
-    ):
-        """Initialize circuit breaker.
-
-        Args:
-            failure_threshold: Consecutive failures before opening circuit
-            reset_timeout: Seconds to wait before attempting half-open state
-            half_open_max_calls: Max concurrent calls in half-open state
-        """
-        self.failure_threshold = failure_threshold
-        self.reset_timeout = reset_timeout
-        self.half_open_max_calls = half_open_max_calls
-
-        self._state = "closed"
-        self._failure_count = 0
-        self._last_failure_time: float | None = None
-        self._half_open_calls = 0
-        self._lock = threading.Lock()
-
-    @property
-    def state(self) -> str:
-        """Get current circuit state."""
-        with self._lock:
-            return self._get_state_unlocked()
-
-    def _get_state_unlocked(self) -> str:
-        """Get state without lock (caller must hold lock)."""
-        if self._state == "open" and self._last_failure_time is not None:
-            elapsed = time.time() - self._last_failure_time
-            if elapsed >= self.reset_timeout:
-                return "half_open"
-        return self._state
-
-    def allow_request(self) -> bool:
-        """Check if a request should be allowed.
-
-        Returns:
-            True if request is allowed, False otherwise.
-
-        Raises:
-            CircuitBreakerOpenError: If circuit is open and blocking calls.
-        """
-        with self._lock:
-            state = self._get_state_unlocked()
-
-            if state == "closed":
-                return True
-
-            if state == "half_open":
-                if self._half_open_calls < self.half_open_max_calls:
-                    self._half_open_calls += 1
-                    return True
-                # Too many half-open calls in progress
-                retry_after = 1.0  # Short retry for half-open
-                raise CircuitBreakerOpenError(
-                    "Circuit breaker half-open, max test calls in progress",
-                    retry_after=retry_after,
-                )
-
-            # state == "open"
-            assert self._last_failure_time is not None
-            retry_after = self.reset_timeout - (time.time() - self._last_failure_time)
-            raise CircuitBreakerOpenError(
-                f"Circuit breaker open due to {self._failure_count} consecutive failures. "
-                f"Retry in {retry_after:.1f}s.",
-                retry_after=max(0.0, retry_after),
-            )
-
-    def record_success(self) -> None:
-        """Record a successful call. Closes circuit if half-open."""
-        with self._lock:
-            self._failure_count = 0
-            self._half_open_calls = 0
-            self._state = "closed"
-            logger.debug("Circuit breaker: success recorded, state=closed")
-
-    def record_failure(self) -> None:
-        """Record a failed call. May open circuit if threshold exceeded."""
-        with self._lock:
-            # Check state BEFORE updating timestamp (otherwise half-open check fails)
-            was_half_open = self._get_state_unlocked() == "half_open"
-
-            self._failure_count += 1
-            self._last_failure_time = time.time()
-
-            # In half-open state, any failure reopens circuit
-            if was_half_open:
-                self._state = "open"
-                self._half_open_calls = 0
-                logger.warning(
-                    "Circuit breaker: failure in half-open state, reopening circuit"
-                )
-                return
-
-            # Check if threshold exceeded
-            if self._failure_count >= self.failure_threshold:
-                self._state = "open"
-                logger.warning(
-                    "Circuit breaker: failure threshold reached (%d), opening circuit",
-                    self._failure_count,
-                )
-            else:
-                logger.debug(
-                    "Circuit breaker: failure recorded (%d/%d)",
-                    self._failure_count,
-                    self.failure_threshold,
-                )
-
-    def release_half_open_slot(self) -> None:
-        """Release a half-open slot without recording success/failure.
-
-        Use this if an exception occurs before the actual call completes,
-        to prevent slot leaks in half-open state.
-        """
-        with self._lock:
-            if self._half_open_calls > 0:
-                self._half_open_calls -= 1
-                logger.debug("Circuit breaker: released half-open slot")
-
-    def reset(self) -> None:
-        """Reset circuit breaker state (for testing)."""
-        with self._lock:
-            self._state = "closed"
-            self._failure_count = 0
-            self._last_failure_time = None
-            self._half_open_calls = 0
-
-
-class RateLimiter:
-    """Thread-safe in-memory rate limiter using sliding window.
-
-    Tracks call timestamps and rejects calls that exceed the configured
-    rate limit within the time window.
-    """
-
-    def __init__(self, max_calls: int, window_seconds: int):
-        self.max_calls = max_calls
-        self.window_seconds = window_seconds
-        self._calls: list[float] = []
-        self._lock = threading.Lock()
-
-    def check_and_record(self) -> None:
-        """Check rate limit and record a call.
-
-        Raises:
-            RateLimitExceededError: If rate limit is exceeded.
-        """
-        now = time.time()
-
-        with self._lock:
-            # Remove calls outside the window
-            cutoff = now - self.window_seconds
-            self._calls = [t for t in self._calls if t > cutoff]
-
-            if len(self._calls) >= self.max_calls:
-                raise RateLimitExceededError(
-                    f"Rate limit exceeded: {self.max_calls} calls per {self.window_seconds}s. "
-                    f"Try again in {self._calls[0] + self.window_seconds - now:.1f}s."
-                )
-
-            self._calls.append(now)
-
-    def reset(self) -> None:
-        """Reset the rate limiter (mainly for testing)."""
-        with self._lock:
-            self._calls = []
 
 
 # Global rate limiter instance (initialized lazily)
@@ -392,6 +208,10 @@ def get_client() -> OpenAI:
     return _client
 
 
+# Retryable errors tuple for DRY exception handling
+_RETRYABLE_ERRORS = (RateLimitError, APIConnectionError, APITimeoutError)
+
+
 def _call_llm_with_retry(
     messages: list[dict],
     temperature: float,
@@ -420,10 +240,9 @@ def _call_llm_with_retry(
     rate_limiter = rate_limiter or get_rate_limiter(settings)
     circuit_breaker = circuit_breaker or get_circuit_breaker(settings)
 
-    # Check circuit breaker before attempting call
-    circuit_breaker.allow_request()
-    # Check state AFTER allow_request() - it may have transitioned open→half_open
-    is_half_open_probe = circuit_breaker.state == "half_open"
+    # Check circuit breaker and get observed state atomically
+    observed_state = circuit_breaker.allow_request()
+    is_half_open_probe = observed_state == "half_open"
 
     # Track whether we've properly closed the circuit breaker state
     cb_resolved = False
@@ -484,50 +303,29 @@ def _call_llm_with_retry(
 
                 return data, usage
 
-            except RateLimitError as e:
+            except _RETRYABLE_ERRORS as e:
                 last_error = e
                 if attempt < max_attempts - 1:
                     base_delay = settings.initial_retry_delay * (2**attempt)
                     delay = base_delay * (0.5 + random.random())  # Jitter: 0.5x to 1.5x
                     logger.warning(
-                        "Retrying LLM call (attempt %d/%d) after RateLimitError, delay=%.1fs",
-                        attempt + 1, max_attempts, delay,
-                    )
-                    time.sleep(delay)
-
-            except APIConnectionError as e:
-                last_error = e
-                if attempt < max_attempts - 1:
-                    base_delay = settings.initial_retry_delay * (2**attempt)
-                    delay = base_delay * (0.5 + random.random())  # Jitter: 0.5x to 1.5x
-                    logger.warning(
-                        "Retrying LLM call (attempt %d/%d) after APIConnectionError, delay=%.1fs",
-                        attempt + 1, max_attempts, delay,
-                    )
-                    time.sleep(delay)
-
-            except APITimeoutError as e:
-                last_error = e
-                if attempt < max_attempts - 1:
-                    base_delay = settings.initial_retry_delay * (2**attempt)
-                    delay = base_delay * (0.5 + random.random())  # Jitter: 0.5x to 1.5x
-                    logger.warning(
-                        "Retrying LLM call (attempt %d/%d) after APITimeoutError, delay=%.1fs",
-                        attempt + 1, max_attempts, delay,
+                        "Retrying LLM call (attempt %d/%d) after %s, delay=%.1fs",
+                        attempt + 1, max_attempts, type(e).__name__, delay,
                     )
                     time.sleep(delay)
 
             except APIError as e:
-                # Don't retry on 4xx errors (bad request, auth, etc.)
-                # Also don't count as circuit breaker failure (client error, not upstream)
+                # Check for 4xx client errors (don't retry, don't count as failure)
                 status_code = getattr(e, "status_code", None)
                 if status_code and 400 <= status_code < 500:
                     is_client_error = True
                     raise LLMError(f"OpenAI API error: {e}")
+
+                # 5xx or unknown - treat as retryable
                 last_error = e
                 if attempt < max_attempts - 1:
                     base_delay = settings.initial_retry_delay * (2**attempt)
-                    delay = base_delay * (0.5 + random.random())  # Jitter: 0.5x to 1.5x
+                    delay = base_delay * (0.5 + random.random())
                     logger.warning(
                         "Retrying LLM call (attempt %d/%d) after APIError, delay=%.1fs",
                         attempt + 1, max_attempts, delay,
@@ -572,71 +370,73 @@ def _analyze_prd_impl(
     client = client or get_client()
     settings = settings or get_settings()
 
-    # Validate empty/whitespace-only input
+    # Validate input is not empty
     if not prd_text or not prd_text.strip():
-        raise ValueError("PRD text cannot be empty.")
+        raise ValueError("PRD text cannot be empty or whitespace only")
 
     # Set correlation ID for this request
     request_id = str(uuid.uuid4())[:8]
     correlation_id.set(request_id)
 
     logger.info("Starting PRD analysis, prd_length=%d", len(prd_text))
+    start_time = time.time()
 
-    # Validate input length (prompt injection mitigation)
+    # Validate input length (security: prevent resource exhaustion)
     if len(prd_text) > settings.max_prd_length:
         raise ValueError(
-            f"PRD text exceeds maximum length of {settings.max_prd_length} characters "
-            f"(got {len(prd_text)}). Set PRD_MAX_PRD_LENGTH to increase limit."
+            f"PRD text too long: {len(prd_text)} chars exceeds limit of {settings.max_prd_length}. "
+            "Consider splitting into smaller documents."
         )
 
     # Generate source hash for traceability
-    source_hash = hashlib.sha256(prd_text.encode()).hexdigest()[:8]
+    source_hash = hashlib.sha256(prd_text.encode()).hexdigest()[:16]
 
-    # Call LLM with retry
-    start_time = time.monotonic()
+    messages = [
+        {
+            "role": "system",
+            "content": ANALYZE_PRD_PROMPT.format(prd_text=prd_text),
+        },
+        {"role": "user", "content": f"Analyze the PRD above. Use source_hash: {source_hash}"},
+    ]
+
     try:
         data, usage = _call_llm_with_retry(
-            messages=[{"role": "user", "content": ANALYZE_PRD_PROMPT.format(prd_text=prd_text)}],
-            temperature=settings.analyze_temperature,
-            client=client,
-            settings=settings,
+            messages=messages, temperature=settings.analyze_temperature, client=client, settings=settings
         )
-    except LLMError as e:
-        elapsed = time.monotonic() - start_time
-        logger.error("PRD analysis failed after %.2fs: %s", elapsed, e)
-        raise RuntimeError(f"Failed to analyze PRD: {e}")
+    except LLMError:
+        logger.error("PRD analysis failed")
+        raise
 
-    elapsed = time.monotonic() - start_time
-
-    # Ensure source_hash is set
-    data["source_hash"] = source_hash
-
-    # Validate with Pydantic
+    # Validate response against Pydantic model
     try:
         validated = StructuredRequirements(**data)
     except ValidationError as e:
-        raise RuntimeError(f"LLM returned invalid structure: {e}")
+        logger.error("PRD analysis failed: invalid LLM response")
+        raise LLMError(f"LLM returned invalid structure: {e}")
 
+    elapsed = time.time() - start_time
+    logger.info(
+        "PRD analysis complete, requirements=%d, elapsed=%.2fs, tokens=%s",
+        len(validated.requirements), elapsed, usage.get("total_tokens", "N/A"),
+    )
+
+    # Add metadata and override source_hash with computed value
     result = validated.model_dump()
-
-    # Add metadata for observability
+    result["source_hash"] = source_hash[:8]  # Use computed hash, truncated to 8 chars
     result["_metadata"] = {
+        "analyzed_at": datetime.now(UTC).isoformat(),
         "prompt_version": PROMPT_VERSION,
         "model": settings.openai_model,
-        "usage": usage,
-        "analyzed_at": datetime.now(UTC).isoformat(),
+        **usage,
     }
-
-    logger.info(
-        "PRD analysis complete, requirement_count=%d, elapsed=%.2fs, tokens=%s",
-        len(result["requirements"]), elapsed, usage.get("total_tokens", "N/A"),
-    )
 
     return result
 
 
 @app.tool
-def analyze_prd(prd_text: Annotated[str, "Raw PRD markdown text to analyze"]) -> dict:
+def analyze_prd(
+    prd_text: Annotated[str, "Raw PRD markdown/text content to analyze"],
+) -> dict:
     """Analyze a PRD and extract structured requirements.
 
     Extracts requirements with IDs, acceptance criteria, dependencies,
@@ -684,8 +484,8 @@ def _decompose_to_tickets_impl(
 
     logger.info("Starting ticket decomposition")
 
-    # Check for None or empty input first
-    if requirements is None or requirements == "":
+    # Check for None, empty string, or empty dict
+    if requirements is None or requirements == "" or requirements == {}:
         raise ValueError(
             "Requirements cannot be empty. Pass the JSON output from analyze_prd as a string."
         )
@@ -700,67 +500,59 @@ def _decompose_to_tickets_impl(
             raise ValueError("Requirements JSON must be an object, not an array or primitive")
         requirements = parsed
 
-    if not requirements:
-        raise ValueError("Requirements cannot be empty. Run analyze_prd first.")
-
-    # Strip internal metadata before validation
-    requirements_clean = {k: v for k, v in requirements.items() if not k.startswith("_")}
-
-    # Validate input
-    try:
-        validated_input = StructuredRequirements(**requirements_clean)
-    except ValidationError as e:
-        raise ValueError(f"Invalid requirements structure: {e}")
-
-    # Call LLM with retry
-    start_time = time.monotonic()
-    try:
-        data, usage = _call_llm_with_retry(
-            messages=[
-                {
-                    "role": "user",
-                    "content": DECOMPOSE_TO_TICKETS_PROMPT.format(
-                        requirements_json=validated_input.model_dump_json(indent=2),
-                        sizing_rubric=rubric_text,
-                    ),
-                }
-            ],
-            temperature=settings.decompose_temperature,
-            client=client,
-            settings=settings,
+    # Validate input length (security: prevent resource exhaustion)
+    requirements_json = json.dumps(requirements)
+    if len(requirements_json) > settings.max_prd_length:
+        raise ValueError(
+            f"Requirements too long: {len(requirements_json)} chars exceeds limit of {settings.max_prd_length}. "
+            "Consider processing in smaller batches."
         )
-    except LLMError as e:
-        elapsed = time.monotonic() - start_time
-        logger.error("Ticket decomposition failed after %.2fs: %s", elapsed, e)
-        raise RuntimeError(f"Failed to decompose requirements: {e}")
 
-    elapsed = time.monotonic() - start_time
+    start_time = time.time()
 
-    # Add metadata if not present
-    if "metadata" not in data:
-        data["metadata"] = {}
-    data["metadata"]["generated_at"] = datetime.now(UTC).isoformat()
-    data["metadata"]["model"] = settings.openai_model
-    data["metadata"]["prompt_version"] = PROMPT_VERSION
-    data["metadata"]["requirement_count"] = len(validated_input.requirements)
-    data["metadata"]["usage"] = usage
+    messages = [
+        {
+            "role": "system",
+            "content": DECOMPOSE_TO_TICKETS_PROMPT.format(
+                sizing_rubric=rubric_text, requirements_json=requirements_json
+            ),
+        },
+        {"role": "user", "content": "Process the requirements above and generate tickets."},
+    ]
 
-    # Count stories
-    story_count = sum(len(epic.get("stories", [])) for epic in data.get("epics", []))
-    data["metadata"]["story_count"] = story_count
+    data, usage = _call_llm_with_retry(
+        messages=messages, temperature=settings.decompose_temperature, client=client, settings=settings
+    )
 
-    # Validate with Pydantic
+    # Validate response against Pydantic model
     try:
         validated = TicketCollection(**data)
     except ValidationError as e:
-        raise RuntimeError(f"LLM returned invalid ticket structure: {e}")
+        raise LLMError(f"LLM returned invalid structure: {e}")
+
+    elapsed = time.time() - start_time
+    story_count = sum(len(epic.stories) for epic in validated.epics)
 
     logger.info(
         "Ticket decomposition complete, epic_count=%d, story_count=%d, elapsed=%.2fs, tokens=%s",
-        len(data.get("epics", [])), story_count, elapsed, usage.get("total_tokens", "N/A"),
+        len(validated.epics), story_count, elapsed, usage.get("total_tokens", "N/A"),
     )
 
-    return validated.model_dump()
+    # Count requirements from input
+    requirement_count = len(requirements.get("requirements", []))
+
+    # Add metadata to result
+    result = validated.model_dump()
+    result["metadata"] = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "prompt_version": PROMPT_VERSION,
+        "model": settings.openai_model,
+        "requirement_count": requirement_count,
+        "story_count": story_count,
+        "usage": usage,
+    }
+
+    return result
 
 
 @app.tool
@@ -802,95 +594,10 @@ def decompose_to_tickets(
 
 
 @app.tool
-def health_check() -> dict:
-    """Check service health and OpenAI API connectivity.
-
-    Returns status information including:
-    - Service status (healthy/degraded/unhealthy)
-    - OpenAI API connectivity
-    - Configuration summary
-    - Rate limiter status
-
-    Use this to verify the service is operational before processing PRDs.
-    """
-    settings = get_settings()
-    status = "healthy"
-    checks: dict[str, dict] = {}
-
-    # Check OpenAI API connectivity
-    try:
-        client = get_client()
-        # Make a minimal API call to verify connectivity
-        response = client.models.list()
-        checks["openai_api"] = {
-            "status": "connected",
-            "models_available": len(response.data) if response.data else 0,
-        }
-    except Exception as e:
-        status = "unhealthy"
-        checks["openai_api"] = {
-            "status": "error",
-            "error": str(e),
-        }
-
-    # Check rate limiter status
-    try:
-        rate_limiter = get_rate_limiter(settings)
-        with rate_limiter._lock:
-            current_calls = len(rate_limiter._calls)
-        checks["rate_limiter"] = {
-            "status": "ok",
-            "current_calls": current_calls,
-            "max_calls": rate_limiter.max_calls,
-            "window_seconds": rate_limiter.window_seconds,
-        }
-    except Exception as e:
-        status = "degraded" if status == "healthy" else status
-        checks["rate_limiter"] = {
-            "status": "error",
-            "error": str(e),
-        }
-
-    # Check circuit breaker status
-    try:
-        circuit_breaker = get_circuit_breaker(settings)
-        cb_state = circuit_breaker.state
-        checks["circuit_breaker"] = {
-            "status": "ok" if cb_state == "closed" else "degraded",
-            "state": cb_state,
-            "failure_count": circuit_breaker._failure_count,
-            "failure_threshold": circuit_breaker.failure_threshold,
-            "reset_timeout": circuit_breaker.reset_timeout,
-        }
-        # Mark degraded for both open and half_open states (recovery in progress)
-        if cb_state in ("open", "half_open"):
-            status = "degraded" if status == "healthy" else status
-    except Exception as e:
-        status = "degraded" if status == "healthy" else status
-        checks["circuit_breaker"] = {
-            "status": "error",
-            "error": str(e),
-        }
-
-    return {
-        "status": status,
-        "checks": checks,
-        "config": {
-            "model": settings.openai_model,
-            "max_retries": settings.max_retries,
-            "llm_timeout": settings.llm_timeout,
-            "max_prd_length": settings.max_prd_length,
-            "circuit_breaker_failure_threshold": settings.circuit_breaker_failure_threshold,
-            "circuit_breaker_reset_timeout": settings.circuit_breaker_reset_timeout,
-        },
-        "version": PROMPT_VERSION,
-    }
-
-
-@app.tool
 def export_tickets(
     tickets_json: Annotated[str, "JSON string of ticket collection from decompose_to_tickets"],
-    format: Annotated[str, "Export format: 'csv', 'jira', or 'yaml'"] = "csv",
+    output_format: Annotated[str, "Export format: 'csv', 'jira', or 'yaml'"] = "csv",
+    project_key: Annotated[str, "Jira project key for issue creation"] = "PROJECT",
 ) -> str:
     """Export tickets to different formats for integration with external tools.
 
@@ -901,343 +608,64 @@ def export_tickets(
 
     Returns the exported content as a string.
     """
-    # Parse input
-    try:
-        tickets = json.loads(tickets_json)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON in tickets: {e}")
+    return _export_tickets_impl(tickets_json, output_format=output_format, project_key=project_key)
 
-    if not isinstance(tickets, dict):
-        raise ValueError(
-            f"Invalid ticket structure: must be a JSON object, got {type(tickets).__name__}"
-        )
 
-    if "epics" not in tickets:
-        raise ValueError("Invalid ticket structure: missing 'epics' key")
+@app.tool
+def health_check() -> dict:
+    """Check service health and dependencies.
 
-    epics = tickets["epics"]
-    if not isinstance(epics, list):
-        raise ValueError(
-            f"Invalid ticket structure: 'epics' must be a list, got {type(epics).__name__}"
-        )
+    Returns status information including:
+    - Service status (healthy/degraded/unhealthy)
+    - OpenAI API connectivity (via simple request)
+    - Circuit breaker state
+    - Rate limiter status
+    - Configuration summary
+    """
+    _ensure_logging_initialized()
 
-    for i, epic in enumerate(epics):
-        if not isinstance(epic, dict):
-            raise ValueError(
-                f"Invalid ticket structure: epics[{i}] must be an object, got {type(epic).__name__}"
-            )
+    settings = get_settings()
+    circuit_breaker = get_circuit_breaker(settings)
+    rate_limiter = get_rate_limiter(settings)
 
-        # Validate epic scalar fields
-        epic_path = f"epics[{i}]"
-        epic["title"] = _validate_string_field(
-            epic.get("title"), "title", epic_path, required=True
-        )
-        epic["description"] = _validate_string_field(
-            epic.get("description"), "description", epic_path, required=False
-        )
+    # Check circuit breaker state
+    cb_state = circuit_breaker.state
 
-        # Validate and normalize stories (null -> empty list)
-        stories = epic.get("stories")
-        if stories is None:
-            stories = []
-            epic["stories"] = stories  # Normalize null to empty list
-        if not isinstance(stories, list):
-            raise ValueError(
-                f"Invalid ticket structure: epics[{i}].stories must be a list, "
-                f"got {type(stories).__name__}"
-            )
-        if stories:
-            for j, story in enumerate(stories):
-                if not isinstance(story, dict):
-                    raise ValueError(
-                        f"Invalid ticket structure: epics[{i}].stories[{j}] must be an object, "
-                        f"got {type(story).__name__}"
-                    )
-                story_path = f"epics[{i}].stories[{j}]"
-
-                # Validate scalar string fields
-                story["title"] = _validate_string_field(
-                    story.get("title"), "title", story_path, required=True
-                )
-                story["description"] = _validate_string_field(
-                    story.get("description"), "description", story_path, required=False
-                )
-
-                # Validate and normalize list-of-string fields
-                story["acceptance_criteria"] = _validate_string_list(
-                    story.get("acceptance_criteria"), "acceptance_criteria", story_path
-                )
-                story["labels"] = _validate_string_list(
-                    story.get("labels"), "labels", story_path
-                )
-                story["requirement_ids"] = _validate_string_list(
-                    story.get("requirement_ids"), "requirement_ids", story_path
-                )
-
-        # Validate epic labels too
-        epic["labels"] = _validate_string_list(
-            epic.get("labels"), "labels", f"epics[{i}]"
-        )
-
-    format_lower = format.lower()
-
-    if format_lower == "csv":
-        return _export_to_csv(tickets)
-    elif format_lower == "jira":
-        return _export_to_jira(tickets)
-    elif format_lower == "yaml":
-        return _export_to_yaml(tickets)
+    # Determine overall status
+    if cb_state == "open":
+        status = "degraded"
+        status_message = "Circuit breaker open - upstream failures detected"
+    elif cb_state == "half_open":
+        status = "degraded"
+        status_message = "Circuit breaker half-open - testing recovery"
     else:
-        raise ValueError(f"Unsupported format: {format}. Use 'csv', 'jira', or 'yaml'.")
+        status = "healthy"
+        status_message = "All systems operational"
 
-
-def _export_to_csv(tickets: dict) -> str:
-    """Export tickets to CSV format."""
-    output = io.StringIO()
-    writer = csv.writer(output)
-
-    # Header
-    writer.writerow([
-        "epic_title",
-        "story_title",
-        "story_description",
-        "acceptance_criteria",
-        "size",
-        "priority",
-        "labels",
-        "requirement_ids",
-    ])
-
-    # Data rows
-    for epic in tickets.get("epics", []):
-        epic_title = epic.get("title", "")
-        for story in epic.get("stories", []):
-            writer.writerow([
-                epic_title,
-                story.get("title", ""),
-                story.get("description", ""),
-                "; ".join(story.get("acceptance_criteria", [])),
-                story.get("size", ""),
-                story.get("priority", "medium"),
-                ", ".join(story.get("labels", [])),
-                ", ".join(story.get("requirement_ids", [])),
-            ])
-
-    return output.getvalue()
-
-
-def _export_to_jira(tickets: dict) -> str:
-    """Export tickets to Jira REST API bulk create format.
-
-    Returns JSON compatible with POST /rest/api/3/issue/bulk.
-    Epic linking must be done post-creation using Jira's Epic Link API.
-    """
-    issues = []
-
-    for epic in tickets.get("epics", []):
-        # Create epic issue
-        epic_issue = {
-            "fields": {
-                "project": {"key": "${PROJECT_KEY}"},
-                "issuetype": {"name": "Epic"},
-                "summary": epic.get("title", ""),
-                "description": {
-                    "type": "doc",
-                    "version": 1,
-                    "content": [
-                        {
-                            "type": "paragraph",
-                            "content": [{"type": "text", "text": epic.get("description", "")}],
-                        }
-                    ],
-                },
-                "labels": epic.get("labels", []),
-            }
-        }
-        issues.append(epic_issue)
-
-        # Create story issues
-        for story in epic.get("stories", []):
-            # Build description with acceptance criteria
-            description_parts = [story.get("description", "")]
-            if story.get("acceptance_criteria"):
-                description_parts.append("\n\nAcceptance Criteria:")
-                for ac in story.get("acceptance_criteria", []):
-                    description_parts.append(f"- {ac}")
-
-            story_issue = {
-                "fields": {
-                    "project": {"key": "${PROJECT_KEY}"},
-                    "issuetype": {"name": "Story"},
-                    "summary": story.get("title", ""),
-                    "description": {
-                        "type": "doc",
-                        "version": 1,
-                        "content": [
-                            {
-                                "type": "paragraph",
-                                "content": [
-                                    {"type": "text", "text": "\n".join(description_parts)}
-                                ],
-                            }
-                        ],
-                    },
-                    "labels": story.get("labels", []),
-                    "priority": {"name": _map_priority_to_jira(story.get("priority", "medium"))},
-                    # Custom field for t-shirt sizing (placeholder)
-                    # "customfield_10001": story.get("size", "M"),
-                },
-            }
-            issues.append(story_issue)
-
-    # Return clean Jira bulk create payload
-    # The payload is compatible with POST /rest/api/3/issue/bulk
-    # Epic linking must be done post-creation using the Jira Epic Link API
-    return json.dumps({"issueUpdates": issues}, indent=2)
-
-
-def _map_priority_to_jira(priority: str | None) -> str:
-    """Map internal priority to Jira priority names.
-
-    Handles non-string priority values by coercing to string or defaulting.
-    """
-    # Handle non-string types
-    if priority is None:
-        return "Medium"
-    if not isinstance(priority, str):
-        # Coerce to string (handles int, float, bool, etc.)
-        priority = str(priority)
-
-    mapping = {
-        "high": "High",
-        "medium": "Medium",
-        "low": "Low",
+    return {
+        "status": status,
+        "message": status_message,
+        "circuit_breaker": {
+            "state": cb_state,
+            "failure_threshold": circuit_breaker.failure_threshold,
+            "reset_timeout": circuit_breaker.reset_timeout,
+        },
+        "rate_limiter": {
+            "max_calls": rate_limiter.max_calls,
+            "window_seconds": rate_limiter.window_seconds,
+        },
+        "config": {
+            "openai_model": settings.openai_model,
+            "analyze_temperature": settings.analyze_temperature,
+            "decompose_temperature": settings.decompose_temperature,
+            "max_retries": settings.max_retries,
+            "llm_timeout": settings.llm_timeout,
+            "max_prd_length": settings.max_prd_length,
+            "circuit_breaker_failure_threshold": settings.circuit_breaker_failure_threshold,
+            "circuit_breaker_reset_timeout": settings.circuit_breaker_reset_timeout,
+        },
+        "version": PROMPT_VERSION,
     }
-    return mapping.get(priority.lower(), "Medium")
-
-
-def _validate_string_field(value: object, field_name: str, path: str, required: bool = True) -> str:
-    """Validate that a value is a string.
-
-    Returns the validated string, coercing non-strings if possible.
-    Raises ValueError with clear path if validation fails for required fields.
-    For required fields, both None and empty strings are rejected.
-    """
-    if value is None:
-        if required:
-            raise ValueError(f"Invalid ticket structure: {path}.{field_name} is required")
-        return ""
-    if not isinstance(value, str):
-        # Coerce to string with warning in logs
-        logger.warning(
-            "Coercing %s.%s from %s to string",
-            path, field_name, type(value).__name__
-        )
-        value = str(value)
-    # Check for empty string after coercion
-    if required and value == "":
-        raise ValueError(f"Invalid ticket structure: {path}.{field_name} cannot be empty")
-    return value
-
-
-def _validate_string_list(value: object, field_name: str, path: str) -> list[str]:
-    """Validate that a value is a list of strings.
-
-    Returns the validated list, coercing non-string elements to strings.
-    Raises ValueError with clear path if validation fails.
-    """
-    if value is None:
-        return []
-    if not isinstance(value, list):
-        raise ValueError(
-            f"Invalid ticket structure: {path}.{field_name} must be a list, "
-            f"got {type(value).__name__}"
-        )
-    # Coerce each element to string
-    result = []
-    for i, item in enumerate(value):
-        if not isinstance(item, str):
-            if item is None:
-                continue  # Skip null items
-            # Coerce to string with warning in logs
-            logger.warning(
-                "Coercing %s.%s[%d] from %s to string",
-                path, field_name, i, type(item).__name__
-            )
-            result.append(str(item))
-        else:
-            result.append(item)
-    return result
-
-
-def _escape_yaml_string(s: str) -> str:
-    """Escape a string for use in double-quoted YAML scalars.
-
-    Handles: backslashes, double quotes, newlines, tabs, carriage returns.
-    """
-    # Order matters: escape backslashes first
-    s = s.replace("\\", "\\\\")
-    s = s.replace('"', '\\"')
-    s = s.replace("\n", "\\n")
-    s = s.replace("\t", "\\t")
-    s = s.replace("\r", "\\r")
-    return s
-
-
-def _yaml_flow_list(items: list[str]) -> str:
-    """Format a list as YAML flow sequence with properly quoted elements.
-
-    Each element is quoted to handle YAML-significant characters (commas, colons, etc).
-    """
-    if not items:
-        return "[]"
-    escaped = [f'"{_escape_yaml_string(item)}"' for item in items]
-    return f"[{', '.join(escaped)}]"
-
-
-def _export_to_yaml(tickets: dict) -> str:
-    """Export tickets to YAML format."""
-    # Simple YAML serialization without external dependency
-    lines = ["# PRD Decomposer Export", f"# Generated: {datetime.now(UTC).isoformat()}", ""]
-
-    epics = tickets.get("epics", [])
-    # Always emit epics key for consistent schema
-    lines.append("epics:")
-
-    if not epics:
-        # Empty list - use flow syntax for consistency
-        lines[-1] = "epics: []"
-    else:
-        for i, epic in enumerate(epics):
-            lines.append(f"  - title: \"{_escape_yaml_string(epic.get('title', ''))}\"")
-            lines.append(f"    description: \"{_escape_yaml_string(epic.get('description', ''))}\"")
-            lines.append(f"    labels: {_yaml_flow_list(epic.get('labels', []))}")
-
-            stories = epic.get("stories", [])
-            if not stories:
-                # Empty stories - use flow syntax instead of block with no items
-                lines.append("    stories: []")
-            else:
-                lines.append("    stories:")
-                for story in stories:
-                    lines.append(f"      - title: \"{_escape_yaml_string(story.get('title', ''))}\"")
-                    lines.append(f"        description: \"{_escape_yaml_string(story.get('description', ''))}\"")
-                    lines.append(f"        size: \"{_escape_yaml_string(str(story.get('size', 'M')))}\"")
-                    lines.append(f"        priority: \"{_escape_yaml_string(str(story.get('priority', 'medium')))}\"")
-                    lines.append(f"        labels: {_yaml_flow_list(story.get('labels', []))}")
-                    lines.append(f"        requirement_ids: {_yaml_flow_list(story.get('requirement_ids', []))}")
-
-                    ac_list = story.get("acceptance_criteria", [])
-                    if ac_list:
-                        lines.append("        acceptance_criteria:")
-                        for ac in ac_list:
-                            lines.append(f"          - \"{_escape_yaml_string(ac)}\"")
-                    else:
-                        lines.append("        acceptance_criteria: []")
-
-            lines.append("")
-
-    return "\n".join(lines)
 
 
 if __name__ == "__main__":

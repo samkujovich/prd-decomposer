@@ -138,13 +138,13 @@ class TestEndToEndWorkflow:
         # Step 3: Export to different formats
         tickets_json = json.dumps(tickets)
 
-        csv_output = export_tickets(tickets_json=tickets_json, format="csv")
+        csv_output = export_tickets(tickets_json=tickets_json, output_format="csv")
         assert "epic_title" in csv_output
         assert "story_title" in csv_output
 
-        yaml_output = export_tickets(tickets_json=tickets_json, format="yaml")
+        yaml_output = export_tickets(tickets_json=tickets_json, output_format="yaml")
         assert "epics:" in yaml_output
 
-        jira_output = export_tickets(tickets_json=tickets_json, format="jira")
+        jira_output = export_tickets(tickets_json=tickets_json, output_format="jira")
         jira_data = json.loads(jira_output)
         assert "issueUpdates" in jira_data

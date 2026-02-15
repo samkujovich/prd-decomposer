@@ -215,31 +215,18 @@ def test_ticket_collection_serialization():
 def test_size_definition_valid():
     """Verify SizeDefinition accepts valid data."""
     size_def = SizeDefinition(
-        label="S",
         duration="Half day",
         scope="Single function",
         risk="Minimal",
     )
-    assert size_def.label == "S"
     assert size_def.duration == "Half day"
-
-
-def test_size_definition_invalid_label():
-    """Verify SizeDefinition rejects invalid label."""
-    with pytest.raises(ValidationError):
-        SizeDefinition(
-            label="XL",  # Invalid - only S, M, L allowed
-            duration="1 week",
-            scope="Multiple teams",
-            risk="High",
-        )
+    assert size_def.scope == "Single function"
 
 
 def test_size_definition_empty_duration_rejected():
     """Verify SizeDefinition rejects empty duration."""
     with pytest.raises(ValidationError):
         SizeDefinition(
-            label="S",
             duration="",  # min_length=1
             scope="Single component",
             risk="Low",
@@ -249,29 +236,25 @@ def test_size_definition_empty_duration_rejected():
 def test_sizing_rubric_default():
     """Verify SizingRubric has sensible defaults."""
     rubric = SizingRubric()
-    assert rubric.small.label == "S"
-    assert rubric.medium.label == "M"
-    assert rubric.large.label == "L"
     assert "Less than 1 day" in rubric.small.duration
+    assert "1-3 days" in rubric.medium.duration
+    assert "3-5 days" in rubric.large.duration
 
 
 def test_sizing_rubric_custom():
     """Verify SizingRubric accepts custom definitions."""
     rubric = SizingRubric(
         small=SizeDefinition(
-            label="S",
             duration="Up to 4 hours",
             scope="Single file",
             risk="None",
         ),
         medium=SizeDefinition(
-            label="M",
             duration="1-2 days",
             scope="Few files",
             risk="Low",
         ),
         large=SizeDefinition(
-            label="L",
             duration="1 week",
             scope="Multiple modules",
             risk="Medium",
@@ -296,9 +279,9 @@ def test_sizing_rubric_to_prompt_text():
 def test_sizing_rubric_json_roundtrip():
     """Verify SizingRubric survives JSON serialization."""
     original = SizingRubric(
-        small=SizeDefinition(label="S", duration="4h", scope="tiny", risk="none"),
-        medium=SizeDefinition(label="M", duration="2d", scope="small", risk="low"),
-        large=SizeDefinition(label="L", duration="5d", scope="big", risk="high"),
+        small=SizeDefinition(duration="4h", scope="tiny", risk="none"),
+        medium=SizeDefinition(duration="2d", scope="small", risk="low"),
+        large=SizeDefinition(duration="5d", scope="big", risk="high"),
     )
     json_str = original.model_dump_json()
     restored = SizingRubric.model_validate_json(json_str)
