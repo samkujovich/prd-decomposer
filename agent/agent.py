@@ -17,6 +17,7 @@ from agent.formatters import (
     format_requirements_table,
     format_ticket_summary,
     format_tickets_hierarchy,
+    render_agent_prompt,
 )
 from agent.session_state import SessionState
 
@@ -83,8 +84,8 @@ def parse_command(user_input: str) -> tuple[str | None, int | None, str | None]:
 
     Returns:
         Tuple of (command, index, argument) where:
-        - command: "accept", "dismiss", "clarify", "tickets", "ambiguities", or None
-        - index: 1-based index for accept/dismiss/clarify, or None
+        - command: "accept", "dismiss", "clarify", "tickets", "ambiguities", "prompt", or None
+        - index: 1-based index for accept/dismiss/clarify/prompt, or None
         - argument: clarification text for "clarify", or None
     """
     stripped = user_input.strip().lower()
@@ -113,6 +114,11 @@ def parse_command(user_input: str) -> tuple[str | None, int | None, str | None]:
     match = re.match(r"clarify\s+(\d+)\s+(.+)", original, re.IGNORECASE)
     if match:
         return ("clarify", int(match.group(1)), match.group(2))
+
+    # prompt N (also copy N, show N)
+    match = re.match(r"(prompt|copy|show)\s+(\d+)", stripped)
+    if match:
+        return ("prompt", int(match.group(2)), None)
 
     return (None, None, None)
 
@@ -166,6 +172,14 @@ def handle_command(
             noun = "ambiguity" if remaining == 1 else "ambiguities"
             return f"Added clarification to {req_id}. {remaining} {noun} remaining."
         return f"Invalid index: {index}. Use 'ambiguities' to see the list."
+
+    if command == "prompt":
+        if index is None:
+            return "Usage: prompt [n] - Show copy-paste prompt for story N"
+        story = session.get_story_by_index(index)
+        if story is None:
+            return f"Story #{index} not found. Run 'tickets' first."
+        return render_agent_prompt(story)
 
     return f"Unknown command: {command}"
 
@@ -419,7 +433,7 @@ async def main() -> None:
         print("=" * 40)
         print("I help convert PRDs into Jira tickets.")
         print("Paste your PRD or provide a file path to get started.")
-        print("\nCommands: accept [n], dismiss [n], clarify [n] \"text\", tickets, ambiguities")
+        print("\nCommands: accept [n], dismiss [n], clarify [n] \"text\", tickets, ambiguities, prompt [n]")
         print("Type 'quit' to exit.\n")
 
         while True:
@@ -461,7 +475,7 @@ async def main() -> None:
                     )
                     user_input = decompose_request
 
-                elif command in ("accept", "dismiss", "clarify", "ambiguities"):
+                elif command in ("accept", "dismiss", "clarify", "ambiguities", "prompt"):
                     # Handle locally without LLM call
                     response = handle_command(command, index, argument, session)
                     print(f"\n{response}\n")
@@ -508,6 +522,14 @@ async def main() -> None:
                 elif _is_tickets_response(final_output):
                     tickets = _extract_tickets_from_output(final_output)
                     if tickets:
+                        session.store_tickets(tickets)
+                        if verbose:
+                            epics = tickets.get("epics", [])
+                            total_stories = sum(
+                                len(e.get("stories", [])) for e in epics
+                            )
+                            print(f"[DEBUG] Stored {len(epics)} epics, {total_stories} stories")
+
                         # Show formatted ticket summary below the prose
                         print("=" * 50)
                         print(format_ticket_summary(tickets))

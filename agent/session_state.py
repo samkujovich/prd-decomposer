@@ -18,12 +18,14 @@ class SessionState:
         accepted_ambiguities: Set of ambiguity IDs the user has accepted
         dismissed_ambiguities: Set of ambiguity IDs the user has dismissed
         clarifications: Map of requirement ID -> clarification text
+        current_tickets: The most recent decompose_to_tickets result, or None
     """
 
     current_requirements: dict[str, Any] | None = None
     accepted_ambiguities: set[str] = field(default_factory=set)
     dismissed_ambiguities: set[str] = field(default_factory=set)
     clarifications: dict[str, str] = field(default_factory=dict)
+    current_tickets: dict[str, Any] | None = None
 
     def store_requirements(self, requirements: dict[str, Any]) -> None:
         """Store requirements from analyze_prd and reset decisions."""
@@ -164,9 +166,34 @@ class SessionState:
 
         return "\n".join(lines)
 
+    def store_tickets(self, tickets: dict[str, Any]) -> None:
+        """Store tickets from decompose_to_tickets."""
+        self.current_tickets = tickets
+
+    def get_story_by_index(self, index: int) -> dict[str, Any] | None:
+        """Get a story by 1-based index across all epics.
+
+        Args:
+            index: 1-based story index
+
+        Returns:
+            Story dict if found, None if index is invalid
+        """
+        if not self.current_tickets:
+            return None
+
+        story_num = 0
+        for epic in self.current_tickets.get("epics", []):
+            for story in epic.get("stories", []):
+                story_num += 1
+                if story_num == index:
+                    return story
+        return None
+
     def reset(self) -> None:
         """Reset all session state."""
         self.current_requirements = None
         self.accepted_ambiguities.clear()
         self.dismissed_ambiguities.clear()
         self.clarifications.clear()
+        self.current_tickets = None

@@ -98,6 +98,20 @@ class TestParseCommand:
         assert idx is None
         assert arg is None
 
+    def test_parse_prompt_command(self):
+        """Parse 'prompt N' command."""
+        cmd, idx, arg = parse_command("prompt 1")
+        assert cmd == "prompt"
+        assert idx == 1
+        assert arg is None
+
+    def test_parse_prompt_aliases(self):
+        """Parse prompt command aliases."""
+        for alias in ("copy", "show"):
+            cmd, idx, _ = parse_command(f"{alias} 2")
+            assert cmd == "prompt"
+            assert idx == 2
+
     def test_parse_case_insensitive_accept(self):
         """Accept command is case-insensitive."""
         cmd, idx, _ = parse_command("ACCEPT 1")
@@ -554,3 +568,101 @@ class TestRenderAgentPrompt:
         assert "## Goal" in result
         assert "The why" in result
         assert "## Before You Start" not in result  # No exploration paths
+
+
+class TestSessionStateTickets:
+    """Tests for SessionState ticket storage and retrieval."""
+
+    def test_store_tickets(self):
+        """store_tickets saves ticket data."""
+        session = SessionState()
+        tickets = {
+            "epics": [{
+                "title": "Epic 1",
+                "stories": [{"title": "Story 1"}, {"title": "Story 2"}]
+            }]
+        }
+        session.store_tickets(tickets)
+        assert session.current_tickets == tickets
+
+    def test_get_story_by_index_valid(self):
+        """get_story_by_index returns correct story."""
+        session = SessionState()
+        session.current_tickets = {
+            "epics": [{
+                "title": "Epic 1",
+                "stories": [{"title": "Story 1"}, {"title": "Story 2"}]
+            }]
+        }
+        story = session.get_story_by_index(1)
+        assert story["title"] == "Story 1"
+
+        story = session.get_story_by_index(2)
+        assert story["title"] == "Story 2"
+
+    def test_get_story_by_index_across_epics(self):
+        """get_story_by_index works across multiple epics."""
+        session = SessionState()
+        session.current_tickets = {
+            "epics": [
+                {"title": "Epic 1", "stories": [{"title": "Story 1"}]},
+                {"title": "Epic 2", "stories": [{"title": "Story 2"}, {"title": "Story 3"}]}
+            ]
+        }
+        assert session.get_story_by_index(1)["title"] == "Story 1"
+        assert session.get_story_by_index(2)["title"] == "Story 2"
+        assert session.get_story_by_index(3)["title"] == "Story 3"
+
+    def test_get_story_by_index_no_tickets(self):
+        """get_story_by_index returns None when no tickets stored."""
+        session = SessionState()
+        assert session.get_story_by_index(1) is None
+
+    def test_get_story_by_index_invalid_index(self):
+        """get_story_by_index returns None for out-of-bounds index."""
+        session = SessionState()
+        session.current_tickets = {
+            "epics": [{"title": "Epic 1", "stories": [{"title": "Story 1"}]}]
+        }
+        assert session.get_story_by_index(0) is None  # 1-based, 0 is invalid
+        assert session.get_story_by_index(2) is None  # Only 1 story
+        assert session.get_story_by_index(99) is None
+
+
+class TestHandlePromptCommand:
+    """Tests for handle_command with prompt command."""
+
+    def test_handle_prompt_no_index(self):
+        """handle_command returns usage when no index provided."""
+        session = SessionState()
+        result = handle_command("prompt", None, None, session)
+        assert "Usage:" in result
+        assert "prompt [n]" in result
+
+    def test_handle_prompt_no_tickets(self):
+        """handle_command returns error when no tickets stored."""
+        session = SessionState()
+        result = handle_command("prompt", 1, None, session)
+        assert "not found" in result
+        assert "Run 'tickets' first" in result
+
+    def test_handle_prompt_valid_index(self):
+        """handle_command returns rendered prompt for valid story."""
+        session = SessionState()
+        session.current_tickets = {
+            "epics": [{
+                "title": "Epic 1",
+                "stories": [{
+                    "title": "Test Story",
+                    "description": "Do the thing",
+                    "agent_context": {
+                        "goal": "The why",
+                    }
+                }]
+            }]
+        }
+        result = handle_command("prompt", 1, None, session)
+        assert "## Goal" in result
+        assert "The why" in result
+        assert "## Task" in result
+        assert "Test Story" in result
