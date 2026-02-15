@@ -1,0 +1,509 @@
+{
+  "epics": [
+    {
+      "title": "Subscription Pricing Plans",
+      "description": "Implement multiple subscription tiers with distinct features and pricing options.",
+      "stories": [
+        {
+          "title": "Implement Starter Plan",
+          "description": "Develop the Starter plan with specified features and pricing.",
+          "acceptance_criteria": [
+            "Starter plan includes 5 team members, 10GB storage, email support, and basic features."
+          ],
+          "size": "M",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "pricing"
+          ],
+          "requirement_ids": [
+            "REQ-001"
+          ],
+          "agent_context": {
+            "goal": "Provide an entry-level subscription option for small teams.",
+            "exploration_paths": [
+              "subscription plans",
+              "pricing tiers"
+            ],
+            "exploration_hints": [
+              "src/plans/",
+              "src/pricing/"
+            ],
+            "known_patterns": [
+              "Follow existing plan structure"
+            ],
+            "verification_tests": [
+              "test_starter_plan_features"
+            ],
+            "self_check": [
+              "Are all Starter plan features implemented?",
+              "Is the pricing correctly applied?"
+            ]
+          }
+        },
+        {
+          "title": "Implement Professional Plan",
+          "description": "Develop the Professional plan with specified features and pricing.",
+          "acceptance_criteria": [
+            "Professional plan includes 25 team members, 100GB storage, priority support, advanced features, and API access."
+          ],
+          "size": "M",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "pricing"
+          ],
+          "requirement_ids": [
+            "REQ-001"
+          ],
+          "agent_context": {
+            "goal": "Provide a mid-tier subscription option for growing teams.",
+            "exploration_paths": [
+              "subscription plans",
+              "pricing tiers"
+            ],
+            "exploration_hints": [
+              "src/plans/",
+              "src/pricing/"
+            ],
+            "known_patterns": [
+              "Follow existing plan structure"
+            ],
+            "verification_tests": [
+              "test_professional_plan_features"
+            ],
+            "self_check": [
+              "Are all Professional plan features implemented?",
+              "Is the pricing correctly applied?"
+            ]
+          }
+        },
+        {
+          "title": "Implement Enterprise Plan",
+          "description": "Develop the Enterprise plan with specified features and pricing.",
+          "acceptance_criteria": [
+            "Enterprise plan includes unlimited team members, unlimited storage, dedicated support, all features, SSO/SAML, and custom contracts."
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "pricing",
+            "auth"
+          ],
+          "requirement_ids": [
+            "REQ-001"
+          ],
+          "agent_context": {
+            "goal": "Provide a comprehensive subscription option for large organizations.",
+            "exploration_paths": [
+              "subscription plans",
+              "pricing tiers",
+              "SSO",
+              "SAML"
+            ],
+            "exploration_hints": [
+              "src/plans/",
+              "src/pricing/",
+              "src/auth/"
+            ],
+            "known_patterns": [
+              "Follow existing plan structure",
+              "Implement SSO/SAML"
+            ],
+            "verification_tests": [
+              "test_enterprise_plan_features"
+            ],
+            "self_check": [
+              "Are all Enterprise plan features implemented?",
+              "Is the pricing correctly applied?",
+              "Is SSO/SAML integration secure?"
+            ]
+          }
+        },
+        {
+          "title": "Implement Annual Billing Discount",
+          "description": "Apply a 20% discount for annual billing across all plans.",
+          "acceptance_criteria": [
+            "All plans available as monthly or annual with a 20% discount for annual billing."
+          ],
+          "size": "S",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "pricing"
+          ],
+          "requirement_ids": [
+            "REQ-001"
+          ],
+          "agent_context": {
+            "goal": "Encourage users to choose annual billing by offering a discount.",
+            "exploration_paths": [
+              "billing cycles",
+              "discounts"
+            ],
+            "exploration_hints": [
+              "src/pricing/"
+            ],
+            "known_patterns": [
+              "Apply percentage-based discounts"
+            ],
+            "verification_tests": [
+              "test_annual_billing_discount"
+            ],
+            "self_check": [
+              "Is the discount correctly applied to all plans?",
+              "Does the discount reflect in the billing summary?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "pricing",
+        "billing"
+      ]
+    },
+    {
+      "title": "Plan Selection and Checkout",
+      "description": "Develop UI and backend for plan selection and subscription checkout flow.",
+      "stories": [
+        {
+          "title": "Create Plan Selection UI",
+          "description": "Develop a pricing page with features for comparing plans and selecting billing cycles.",
+          "acceptance_criteria": [
+            "Display side-by-side plan comparison.",
+            "Include a feature matrix with checkmarks.",
+            "Provide a toggle for monthly/annual billing.",
+            "Indicate 'Current plan' for logged-in users.",
+            "Include 'Contact sales' option for Enterprise plan."
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "ui",
+            "pricing"
+          ],
+          "requirement_ids": [
+            "REQ-002"
+          ],
+          "agent_context": {
+            "goal": "Enable users to easily compare and select subscription plans.",
+            "exploration_paths": [
+              "UI design",
+              "pricing page"
+            ],
+            "exploration_hints": [
+              "src/pages/pricing/",
+              "src/components/"
+            ],
+            "known_patterns": [
+              "Use existing UI components"
+            ],
+            "verification_tests": [
+              "test_plan_selection_ui"
+            ],
+            "self_check": [
+              "Is the UI responsive and accessible?",
+              "Does the plan comparison clearly highlight differences?"
+            ]
+          }
+        },
+        {
+          "title": "Implement Subscription Checkout Flow",
+          "description": "Develop the checkout flow for selecting plans, entering payment details, and confirming subscriptions.",
+          "acceptance_criteria": [
+            "Allow users to select a plan and billing cycle.",
+            "Enable payment method entry via Stripe Elements.",
+            "Support coupon code application.",
+            "Display order summary with taxes.",
+            "Include a terms of service checkbox.",
+            "Provide a 'Subscribe' button with loading state.",
+            "Show a confirmation page with receipt."
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "frontend",
+            "backend",
+            "checkout",
+            "stripe"
+          ],
+          "requirement_ids": [
+            "REQ-003"
+          ],
+          "agent_context": {
+            "goal": "Facilitate a seamless and secure subscription checkout experience.",
+            "exploration_paths": [
+              "checkout flow",
+              "payment integration"
+            ],
+            "exploration_hints": [
+              "src/pages/checkout/",
+              "src/integrations/stripe/"
+            ],
+            "known_patterns": [
+              "Use Stripe Elements for payment"
+            ],
+            "verification_tests": [
+              "test_checkout_flow",
+              "test_payment_integration"
+            ],
+            "self_check": [
+              "Is the payment process secure and compliant?",
+              "Does the checkout flow handle errors gracefully?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "ui",
+        "checkout",
+        "stripe"
+      ]
+    },
+    {
+      "title": "Subscription Management and Billing",
+      "description": "Develop features for self-service subscription management and automated billing.",
+      "stories": [
+        {
+          "title": "Develop Self-Service Subscription Management Portal",
+          "description": "Create a portal for users to manage their subscriptions.",
+          "acceptance_criteria": [
+            "Users can view current plan and next billing date.",
+            "Display usage meters for team members and storage.",
+            "Show payment method on file (last 4 digits).",
+            "Provide billing history with downloadable invoices.",
+            "Allow users to update payment method.",
+            "Enable plan changes (upgrade/downgrade).",
+            "Allow subscription cancellation."
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "frontend",
+            "backend",
+            "billing"
+          ],
+          "requirement_ids": [
+            "REQ-004"
+          ],
+          "agent_context": {
+            "goal": "Empower users to manage their subscriptions independently.",
+            "exploration_paths": [
+              "subscription management",
+              "billing portal"
+            ],
+            "exploration_hints": [
+              "src/pages/settings/billing/",
+              "src/components/"
+            ],
+            "known_patterns": [
+              "Use existing billing APIs"
+            ],
+            "verification_tests": [
+              "test_billing_portal"
+            ],
+            "self_check": [
+              "Is the portal user-friendly and intuitive?",
+              "Does it securely handle user data?"
+            ]
+          }
+        },
+        {
+          "title": "Implement Mid-Cycle Plan Change Handling",
+          "description": "Handle logic for upgrades, downgrades, and cancellations mid-cycle.",
+          "acceptance_criteria": [
+            "Upgrades provide immediate access with prorated charge.",
+            "Downgrades take effect at the next billing cycle.",
+            "Cancellations allow access until the current period ends.",
+            "Show confirmation with price impact before changes."
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "backend",
+            "billing"
+          ],
+          "requirement_ids": [
+            "REQ-005"
+          ],
+          "agent_context": {
+            "goal": "Ensure smooth transitions for users changing their subscription plans.",
+            "exploration_paths": [
+              "billing logic",
+              "plan changes"
+            ],
+            "exploration_hints": [
+              "src/billing/"
+            ],
+            "known_patterns": [
+              "Prorate charges for upgrades"
+            ],
+            "verification_tests": [
+              "test_plan_change_logic"
+            ],
+            "self_check": [
+              "Are charges correctly prorated?",
+              "Is user informed of changes and impacts?"
+            ]
+          }
+        },
+        {
+          "title": "Integrate Payment Processing with Stripe",
+          "description": "Integrate Stripe for secure payment processing.",
+          "acceptance_criteria": [
+            "Tokenize card data without storing raw numbers.",
+            "Support 3D Secure for SCA compliance.",
+            "Handle declined cards gracefully.",
+            "Retry failed payments on days 1, 3, and 7.",
+            "Send dunning emails for payment issues.",
+            "Pause account after 14 days of payment failure."
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "stripe",
+            "security"
+          ],
+          "requirement_ids": [
+            "REQ-006"
+          ],
+          "agent_context": {
+            "goal": "Ensure secure and compliant payment processing.",
+            "exploration_paths": [
+              "payment integration",
+              "Stripe API"
+            ],
+            "exploration_hints": [
+              "src/integrations/stripe/"
+            ],
+            "known_patterns": [
+              "Use Stripe's secure tokenization"
+            ],
+            "verification_tests": [
+              "test_payment_processing",
+              "test_dunning_emails"
+            ],
+            "self_check": [
+              "Is payment data handled securely?",
+              "Are all compliance requirements met?"
+            ]
+          }
+        },
+        {
+          "title": "Automate Invoicing",
+          "description": "Generate and send invoices automatically for each successful charge.",
+          "acceptance_criteria": [
+            "Generate PDF invoice on each successful charge.",
+            "Include company details, line items, and taxes.",
+            "Use sequential invoice numbers.",
+            "Email invoice to billing contact.",
+            "Support VAT/GST based on location."
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "backend",
+            "billing",
+            "invoicing"
+          ],
+          "requirement_ids": [
+            "REQ-007"
+          ],
+          "agent_context": {
+            "goal": "Provide automated and accurate invoicing for all charges.",
+            "exploration_paths": [
+              "invoicing",
+              "PDF generation"
+            ],
+            "exploration_hints": [
+              "src/billing/invoicing/"
+            ],
+            "known_patterns": [
+              "Use existing PDF generation library"
+            ],
+            "verification_tests": [
+              "test_invoice_generation"
+            ],
+            "self_check": [
+              "Are invoices generated correctly for each charge?",
+              "Do they include all necessary details?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "billing",
+        "management",
+        "stripe"
+      ]
+    },
+    {
+      "title": "Usage-Based Billing and Add-ons",
+      "description": "Implement metered billing for additional usage beyond plan limits.",
+      "stories": [
+        {
+          "title": "Implement Usage-Based Add-ons",
+          "description": "Support metered billing for additional usage beyond plan limits.",
+          "acceptance_criteria": [
+            "Charge $10/user/month for additional team members.",
+            "Charge $5/10GB/month for additional storage.",
+            "Charge $0.001/call for API calls beyond limit.",
+            "Report usage to Stripe daily.",
+            "Show projected overage on dashboard."
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "backend",
+            "billing",
+            "usage"
+          ],
+          "requirement_ids": [
+            "REQ-008"
+          ],
+          "agent_context": {
+            "goal": "Enable flexible billing for users exceeding their plan limits.",
+            "exploration_paths": [
+              "metered billing",
+              "usage tracking"
+            ],
+            "exploration_hints": [
+              "src/billing/usage/",
+              "src/dashboard/"
+            ],
+            "known_patterns": [
+              "Use Stripe for usage reporting"
+            ],
+            "verification_tests": [
+              "test_usage_billing"
+            ],
+            "self_check": [
+              "Is usage tracked accurately?",
+              "Are additional charges applied correctly?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "billing",
+        "usage",
+        "stripe"
+      ]
+    }
+  ],
+  "metadata": {
+    "generated_at": "2026-02-15T19:29:20.779424+00:00",
+    "prompt_version": "1.6.0",
+    "model": "gpt-4o",
+    "requirement_count": 8,
+    "story_count": 11,
+    "usage": {
+      "prompt_tokens": 2525,
+      "completion_tokens": 2820,
+      "total_tokens": 5345
+    }
+  }
+}

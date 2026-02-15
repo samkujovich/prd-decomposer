@@ -1,0 +1,373 @@
+{
+  "epics": [
+    {
+      "title": "Single-Page Checkout",
+      "description": "Consolidate the checkout process into a single, scrollable page to improve user experience and reduce cart abandonment.",
+      "stories": [
+        {
+          "title": "Implement single-page checkout layout",
+          "description": "Create a single-page layout for checkout with sections for cart summary, shipping information, payment method, and order review.",
+          "acceptance_criteria": [
+            "Checkout process is on a single page",
+            "Page is responsive and fast",
+            "Cart summary is collapsible on mobile devices"
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "frontend",
+            "ui",
+            "responsive"
+          ],
+          "requirement_ids": [
+            "REQ-001"
+          ],
+          "agent_context": {
+            "goal": "Streamline the checkout process to enhance user experience and reduce abandonment rates.",
+            "exploration_paths": [
+              "single-page application",
+              "responsive design",
+              "checkout UX"
+            ],
+            "exploration_hints": [
+              "src/pages/checkout/",
+              "src/components/"
+            ],
+            "known_patterns": [
+              "Use existing responsive grid system"
+            ],
+            "verification_tests": [
+              "test_single_page_checkout_layout"
+            ],
+            "self_check": [
+              "Is the page load time under 2 seconds?",
+              "Does the layout adapt well to different screen sizes?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "checkout",
+        "ux"
+      ]
+    },
+    {
+      "title": "Guest Checkout",
+      "description": "Enable users to complete purchases without creating an account to simplify the checkout process.",
+      "stories": [
+        {
+          "title": "Implement guest checkout feature",
+          "description": "Allow users to checkout without creating an account, requiring only an email address for order confirmation.",
+          "acceptance_criteria": [
+            "Users can checkout without account creation",
+            "Email address is required for order confirmation",
+            "Option to create an account post-purchase with one click",
+            "Guest orders are stored and linked by email"
+          ],
+          "size": "M",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "auth",
+            "database"
+          ],
+          "requirement_ids": [
+            "REQ-002"
+          ],
+          "agent_context": {
+            "goal": "Reduce friction in the checkout process by allowing purchases without mandatory account creation.",
+            "exploration_paths": [
+              "guest checkout",
+              "order confirmation",
+              "user authentication"
+            ],
+            "exploration_hints": [
+              "src/auth/",
+              "src/orders/"
+            ],
+            "known_patterns": [
+              "Follow existing order processing patterns"
+            ],
+            "verification_tests": [
+              "test_guest_checkout_flow"
+            ],
+            "self_check": [
+              "Is the email confirmation sent promptly?",
+              "Can users easily create an account post-purchase?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "checkout",
+        "user-experience"
+      ]
+    },
+    {
+      "title": "Address Autocomplete",
+      "description": "Enhance user experience by implementing address autocomplete using Google Places API.",
+      "stories": [
+        {
+          "title": "Integrate Google Places API for address autocomplete",
+          "description": "Implement address autocomplete feature using Google Places API to support and validate international addresses.",
+          "acceptance_criteria": [
+            "Address autocomplete is implemented using Google Places API",
+            "Supports international addresses",
+            "Validates addresses before submission",
+            "Displays 'We can't deliver here' for unsupported regions"
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "api",
+            "validation"
+          ],
+          "requirement_ids": [
+            "REQ-003"
+          ],
+          "agent_context": {
+            "goal": "Improve address entry accuracy and speed by providing autocomplete suggestions.",
+            "exploration_paths": [
+              "Google Places API",
+              "address validation",
+              "internationalization"
+            ],
+            "exploration_hints": [
+              "src/components/address/",
+              "src/utils/"
+            ],
+            "known_patterns": [
+              "Use existing API integration patterns"
+            ],
+            "verification_tests": [
+              "test_address_autocomplete"
+            ],
+            "self_check": [
+              "Does the autocomplete work for all major regions?",
+              "Is the address validation robust?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "checkout",
+        "ux"
+      ]
+    },
+    {
+      "title": "Multiple Payment Methods",
+      "description": "Support a variety of payment options to enhance user convenience and flexibility.",
+      "stories": [
+        {
+          "title": "Implement multiple payment methods",
+          "description": "Support various payment options including credit/debit cards, PayPal, Apple Pay, Google Pay, and Klarna.",
+          "acceptance_criteria": [
+            "Support for Visa, Mastercard, and Amex",
+            "Support for PayPal",
+            "Support for Apple Pay on Safari/iOS",
+            "Support for Google Pay on Chrome/Android",
+            "Support for Buy Now Pay Later with Klarna"
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "payment",
+            "api"
+          ],
+          "requirement_ids": [
+            "REQ-004"
+          ],
+          "agent_context": {
+            "goal": "Provide users with flexible payment options to increase conversion rates.",
+            "exploration_paths": [
+              "payment gateway integration",
+              "Apple Pay",
+              "Google Pay",
+              "Klarna"
+            ],
+            "exploration_hints": [
+              "src/payments/",
+              "src/api/"
+            ],
+            "known_patterns": [
+              "Use existing payment gateway integration patterns"
+            ],
+            "verification_tests": [
+              "test_payment_methods_integration"
+            ],
+            "self_check": [
+              "Is the transaction completion time under 5 seconds?",
+              "Are all payment methods working seamlessly?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "checkout",
+        "payments"
+      ]
+    },
+    {
+      "title": "Real-time Validation",
+      "description": "Enhance form usability by implementing real-time validation for checkout fields.",
+      "stories": [
+        {
+          "title": "Implement real-time form validation",
+          "description": "Validate form fields in real-time as the user types, showing inline errors.",
+          "acceptance_criteria": [
+            "Email format is validated",
+            "Card number is validated using Luhn algorithm",
+            "Expiration date is validated to not be in the past",
+            "CVV is validated to be 3-4 digits",
+            "Shipping address completeness is validated",
+            "Inline errors are displayed"
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "validation",
+            "ux"
+          ],
+          "requirement_ids": [
+            "REQ-005"
+          ],
+          "agent_context": {
+            "goal": "Improve user experience by providing immediate feedback on form input errors.",
+            "exploration_paths": [
+              "form validation",
+              "real-time feedback",
+              "Luhn algorithm"
+            ],
+            "exploration_hints": [
+              "src/components/forms/",
+              "src/utils/validation/"
+            ],
+            "known_patterns": [
+              "Use existing form validation library"
+            ],
+            "verification_tests": [
+              "test_real_time_validation"
+            ],
+            "self_check": [
+              "Are all validation rules correctly implemented?",
+              "Is the user experience smooth with real-time feedback?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "checkout",
+        "ux"
+      ]
+    },
+    {
+      "title": "Order Summary and Promo Code Support",
+      "description": "Provide users with a detailed order summary and the ability to apply promo codes.",
+      "stories": [
+        {
+          "title": "Display detailed order summary",
+          "description": "Show an itemized order summary including product details, pricing, and totals.",
+          "acceptance_criteria": [
+            "Displays product thumbnails, names, and quantities",
+            "Shows individual prices and line totals",
+            "Displays subtotal, shipping cost, tax, discount codes, and grand total"
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "ui",
+            "order"
+          ],
+          "requirement_ids": [
+            "REQ-006"
+          ],
+          "agent_context": {
+            "goal": "Provide transparency and clarity on order details to users.",
+            "exploration_paths": [
+              "order summary",
+              "pricing details",
+              "ui design"
+            ],
+            "exploration_hints": [
+              "src/components/order/",
+              "src/pages/checkout/"
+            ],
+            "known_patterns": [
+              "Use existing UI components for displaying lists"
+            ],
+            "verification_tests": [
+              "test_order_summary_display"
+            ],
+            "self_check": [
+              "Is all pricing information accurate?",
+              "Does the summary update dynamically with changes?"
+            ]
+          }
+        },
+        {
+          "title": "Implement promo code functionality",
+          "description": "Allow users to enter promo codes and see the discount applied to their order.",
+          "acceptance_criteria": [
+            "Single input field for promo code with 'Apply' button",
+            "Displays success/error message",
+            "Shows discount amount",
+            "Supports percentage and fixed discounts",
+            "Validates code server-side"
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "backend",
+            "discount"
+          ],
+          "requirement_ids": [
+            "REQ-007"
+          ],
+          "agent_context": {
+            "goal": "Encourage purchases by allowing users to apply promotional discounts.",
+            "exploration_paths": [
+              "promo code validation",
+              "discount application",
+              "user incentives"
+            ],
+            "exploration_hints": [
+              "src/components/promo/",
+              "src/api/discounts/"
+            ],
+            "known_patterns": [
+              "Follow existing discount validation patterns"
+            ],
+            "verification_tests": [
+              "test_promo_code_application"
+            ],
+            "self_check": [
+              "Are both percentage and fixed discounts supported?",
+              "Is the promo code validation secure and efficient?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "checkout",
+        "promotions"
+      ]
+    }
+  ],
+  "metadata": {
+    "generated_at": "2026-02-15T19:26:14.296491+00:00",
+    "prompt_version": "1.6.0",
+    "model": "gpt-4o",
+    "requirement_count": 7,
+    "story_count": 7,
+    "usage": {
+      "prompt_tokens": 2393,
+      "completion_tokens": 2087,
+      "total_tokens": 4480
+    }
+  }
+}

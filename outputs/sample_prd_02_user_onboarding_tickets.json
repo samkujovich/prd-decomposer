@@ -1,0 +1,279 @@
+{
+  "epics": [
+    {
+      "title": "Welcome and Onboarding Experience",
+      "description": "Develop a guided onboarding experience to improve user activation rates and feature discovery.",
+      "stories": [
+        {
+          "title": "Implement Welcome Screen",
+          "description": "Create a welcome screen that appears after email verification with personalized greeting and options.",
+          "acceptance_criteria": [
+            "Welcome screen appears after email verification",
+            "Personalized greeting uses user's name",
+            "Product value proposition displayed in 3-4 bullet points",
+            "\"Get Started\" CTA button is present",
+            "Option to skip onboarding is available"
+          ],
+          "size": "M",
+          "priority": "high",
+          "labels": [
+            "frontend",
+            "ui",
+            "personalization"
+          ],
+          "requirement_ids": [
+            "REQ-001"
+          ],
+          "agent_context": {
+            "goal": "Enhance user engagement by providing a personalized welcome experience.",
+            "exploration_paths": [
+              "welcome screen",
+              "personalization",
+              "UI components"
+            ],
+            "exploration_hints": [
+              "src/components/welcome/",
+              "src/pages/onboarding/"
+            ],
+            "known_patterns": [
+              "Use existing UI components",
+              "Follow personalization guidelines"
+            ],
+            "verification_tests": [
+              "test_welcome_screen_display",
+              "test_personalized_greeting"
+            ],
+            "self_check": [
+              "Is the greeting correctly personalized?",
+              "Are all UI elements responsive?"
+            ]
+          }
+        },
+        {
+          "title": "Develop User Type Selection",
+          "description": "Enable users to select their user type for personalized onboarding.",
+          "acceptance_criteria": [
+            "User can select from Individual, Team Lead, or Enterprise Admin",
+            "Selection is stored in user profile for future personalization"
+          ],
+          "size": "M",
+          "priority": "high",
+          "labels": [
+            "frontend",
+            "backend",
+            "personalization"
+          ],
+          "requirement_ids": [
+            "REQ-002"
+          ],
+          "agent_context": {
+            "goal": "Tailor the onboarding experience based on user type to improve relevance.",
+            "exploration_paths": [
+              "user type selection",
+              "profile management"
+            ],
+            "exploration_hints": [
+              "src/components/onboarding/",
+              "src/api/user/"
+            ],
+            "known_patterns": [
+              "Use existing profile storage methods"
+            ],
+            "verification_tests": [
+              "test_user_type_selection",
+              "test_user_profile_update"
+            ],
+            "self_check": [
+              "Is the selection stored correctly in the user profile?",
+              "Does the UI update based on the selected user type?"
+            ]
+          }
+        },
+        {
+          "title": "Implement Goal Setting Feature",
+          "description": "Present relevant goals based on user type and allow users to select at least one.",
+          "acceptance_criteria": [
+            "Goals presented are relevant to user type",
+            "User can select multiple goals",
+            "At least one goal selection is required"
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "backend",
+            "personalization"
+          ],
+          "requirement_ids": [
+            "REQ-003"
+          ],
+          "agent_context": {
+            "goal": "Guide users to set relevant goals to enhance their onboarding experience.",
+            "exploration_paths": [
+              "goal setting",
+              "user personalization"
+            ],
+            "exploration_hints": [
+              "src/components/goals/",
+              "src/api/goals/"
+            ],
+            "known_patterns": [
+              "Follow existing goal selection patterns"
+            ],
+            "verification_tests": [
+              "test_goal_selection",
+              "test_goal_relevance"
+            ],
+            "self_check": [
+              "Are the goals relevant to the user type?",
+              "Is at least one goal required before proceeding?"
+            ]
+          }
+        },
+        {
+          "title": "Profile Completion Form",
+          "description": "Collect essential profile information including display name, profile photo, timezone, and notification preferences.",
+          "acceptance_criteria": [
+            "Display name is required and between 2-50 characters",
+            "Profile photo is optional, max 5MB, jpg/png only",
+            "Timezone is auto-detected but can be overridden by user",
+            "User can set notification preferences"
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "backend",
+            "profile"
+          ],
+          "requirement_ids": [
+            "REQ-004"
+          ],
+          "agent_context": {
+            "goal": "Ensure users provide necessary profile information for a personalized experience.",
+            "exploration_paths": [
+              "profile form",
+              "user settings"
+            ],
+            "exploration_hints": [
+              "src/components/profile/",
+              "src/api/user/"
+            ],
+            "known_patterns": [
+              "Use existing form validation libraries"
+            ],
+            "verification_tests": [
+              "test_profile_completion",
+              "test_photo_upload"
+            ],
+            "self_check": [
+              "Is the display name validation correct?",
+              "Can users override the auto-detected timezone?"
+            ]
+          }
+        },
+        {
+          "title": "Create Interactive Tutorial",
+          "description": "Provide a 5-step interactive tutorial post-profile setup to guide users through key features.",
+          "acceptance_criteria": [
+            "Tutorial includes steps: create project, add task, set due date, invite collaborator, complete task",
+            "Each step has highlighted UI element with tooltip",
+            "\"Next\" and \"Skip\" buttons are available",
+            "Progress indicator shows current step out of 5"
+          ],
+          "size": "L",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "tutorial",
+            "ui"
+          ],
+          "requirement_ids": [
+            "REQ-005"
+          ],
+          "agent_context": {
+            "goal": "Help users discover key features through an interactive guide.",
+            "exploration_paths": [
+              "interactive tutorial",
+              "UI guidance"
+            ],
+            "exploration_hints": [
+              "src/components/tutorial/",
+              "src/pages/features/"
+            ],
+            "known_patterns": [
+              "Use existing tooltip libraries"
+            ],
+            "verification_tests": [
+              "test_tutorial_steps",
+              "test_tutorial_navigation"
+            ],
+            "self_check": [
+              "Does the tutorial adapt based on user type?",
+              "Is the progress indicator accurate?"
+            ]
+          }
+        },
+        {
+          "title": "Implement Completion Celebration",
+          "description": "Celebrate onboarding completion with a confetti animation, success message, quick links, and help center link.",
+          "acceptance_criteria": [
+            "Confetti animation is shown",
+            "\"You're all set!\" message is displayed",
+            "Quick links to common actions are provided",
+            "Link to help center is available"
+          ],
+          "size": "S",
+          "priority": "low",
+          "labels": [
+            "frontend",
+            "ui",
+            "celebration"
+          ],
+          "requirement_ids": [
+            "REQ-006"
+          ],
+          "agent_context": {
+            "goal": "Provide a positive reinforcement to users completing the onboarding process.",
+            "exploration_paths": [
+              "celebration animation",
+              "UI feedback"
+            ],
+            "exploration_hints": [
+              "src/components/celebration/",
+              "src/pages/onboarding/"
+            ],
+            "known_patterns": [
+              "Use existing animation libraries"
+            ],
+            "verification_tests": [
+              "test_completion_celebration",
+              "test_quick_links"
+            ],
+            "self_check": [
+              "Is the animation smooth and non-intrusive?",
+              "Are the quick links relevant and functional?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "onboarding",
+        "user experience",
+        "personalization"
+      ]
+    }
+  ],
+  "metadata": {
+    "generated_at": "2026-02-15T19:25:41.424971+00:00",
+    "prompt_version": "1.6.0",
+    "model": "gpt-4o",
+    "requirement_count": 6,
+    "story_count": 6,
+    "usage": {
+      "prompt_tokens": 2188,
+      "completion_tokens": 1584,
+      "total_tokens": 3772
+    }
+  }
+}

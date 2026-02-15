@@ -1,0 +1,154 @@
+{
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "title": "Support for Multiple Pricing Plans",
+      "description": "Implement three subscription tiers: Starter, Professional, and Enterprise, each with distinct features and pricing.",
+      "acceptance_criteria": [
+        "Starter plan includes 5 team members, 10GB storage, email support, and basic features.",
+        "Professional plan includes 25 team members, 100GB storage, priority support, advanced features, and API access.",
+        "Enterprise plan includes unlimited team members, unlimited storage, dedicated support, all features, SSO/SAML, and custom contracts.",
+        "All plans available as monthly or annual with a 20% discount for annual billing."
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-002",
+      "title": "Plan Selection UI",
+      "description": "Create a pricing page at /pricing with features for comparing plans and selecting billing cycles.",
+      "acceptance_criteria": [
+        "Display side-by-side plan comparison.",
+        "Include a feature matrix with checkmarks.",
+        "Provide a toggle for monthly/annual billing.",
+        "Indicate 'Current plan' for logged-in users.",
+        "Include 'Contact sales' option for Enterprise plan."
+      ],
+      "dependencies": [
+        "REQ-001"
+      ],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-003",
+      "title": "Subscription Checkout Flow",
+      "description": "Implement a checkout flow for selecting plans, entering payment details, and confirming subscriptions.",
+      "acceptance_criteria": [
+        "Allow users to select a plan and billing cycle.",
+        "Enable payment method entry via Stripe Elements.",
+        "Support coupon code application.",
+        "Display order summary with taxes.",
+        "Include a terms of service checkbox.",
+        "Provide a 'Subscribe' button with loading state.",
+        "Show a confirmation page with receipt."
+      ],
+      "dependencies": [
+        "REQ-001",
+        "REQ-002"
+      ],
+      "ambiguity_flags": [],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-004",
+      "title": "Self-Service Subscription Management",
+      "description": "Develop a self-service portal at /settings/billing for managing subscriptions.",
+      "acceptance_criteria": [
+        "Users can view current plan and next billing date.",
+        "Display usage meters for team members and storage.",
+        "Show payment method on file (last 4 digits).",
+        "Provide billing history with downloadable invoices.",
+        "Allow users to update payment method.",
+        "Enable plan changes (upgrade/downgrade).",
+        "Allow subscription cancellation."
+      ],
+      "dependencies": [
+        "REQ-001",
+        "REQ-003"
+      ],
+      "ambiguity_flags": [],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-005",
+      "title": "Handling Mid-Cycle Plan Changes",
+      "description": "Implement logic for handling upgrades, downgrades, and cancellations mid-cycle.",
+      "acceptance_criteria": [
+        "Upgrades provide immediate access with prorated charge.",
+        "Downgrades take effect at the next billing cycle.",
+        "Cancellations allow access until the current period ends.",
+        "Show confirmation with price impact before changes."
+      ],
+      "dependencies": [
+        "REQ-004"
+      ],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-006",
+      "title": "Payment Processing Integration with Stripe",
+      "description": "Integrate payment processing using Stripe, ensuring security and compliance.",
+      "acceptance_criteria": [
+        "Tokenize card data without storing raw numbers.",
+        "Support 3D Secure for SCA compliance.",
+        "Handle declined cards gracefully.",
+        "Retry failed payments on days 1, 3, and 7.",
+        "Send dunning emails for payment issues.",
+        "Pause account after 14 days of payment failure."
+      ],
+      "dependencies": [
+        "REQ-003"
+      ],
+      "ambiguity_flags": [],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-007",
+      "title": "Automated Invoicing",
+      "description": "Generate and send invoices automatically for each successful charge.",
+      "acceptance_criteria": [
+        "Generate PDF invoice on each successful charge.",
+        "Include company details, line items, and taxes.",
+        "Use sequential invoice numbers.",
+        "Email invoice to billing contact.",
+        "Support VAT/GST based on location."
+      ],
+      "dependencies": [
+        "REQ-006"
+      ],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-008",
+      "title": "Usage-Based Add-ons",
+      "description": "Support metered billing for additional usage beyond plan limits.",
+      "acceptance_criteria": [
+        "Charge $10/user/month for additional team members.",
+        "Charge $5/10GB/month for additional storage.",
+        "Charge $0.001/call for API calls beyond limit.",
+        "Report usage to Stripe daily.",
+        "Show projected overage on dashboard."
+      ],
+      "dependencies": [
+        "REQ-001",
+        "REQ-006"
+      ],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    }
+  ],
+  "summary": "Develop a subscription billing system with multiple pricing plans, self-service management, and automated invoicing, integrated with Stripe for secure payment processing.",
+  "source_hash": "86d46bbe",
+  "_metadata": {
+    "analyzed_at": "2026-02-15T19:28:49.534383+00:00",
+    "prompt_version": "1.6.0",
+    "model": "gpt-4o",
+    "prompt_tokens": 1421,
+    "completion_tokens": 1180,
+    "total_tokens": 2601
+  }
+}

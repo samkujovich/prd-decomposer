@@ -1,0 +1,420 @@
+{
+  "epics": [
+    {
+      "title": "Dashboard Home and Customization",
+      "description": "Create a main dashboard view with customizable widgets and global filters.",
+      "stories": [
+        {
+          "title": "Implement main dashboard view",
+          "description": "Create a main dashboard view accessible at /analytics with customizable widgets.",
+          "acceptance_criteria": [
+            "Dashboard accessible at /analytics",
+            "Supports grid of customizable widgets",
+            "Includes add/remove widgets button"
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "frontend",
+            "ui",
+            "dashboard"
+          ],
+          "requirement_ids": [
+            "REQ-001"
+          ],
+          "agent_context": {
+            "goal": "Provide users with a customizable dashboard for personalized data visualization.",
+            "exploration_paths": [
+              "dashboard UI",
+              "widget management",
+              "frontend routing"
+            ],
+            "exploration_hints": [
+              "src/pages/analytics/",
+              "src/components/widgets/"
+            ],
+            "known_patterns": [
+              "Use grid layout libraries",
+              "Follow existing UI component patterns"
+            ],
+            "verification_tests": [
+              "test_dashboard_accessibility",
+              "test_widget_customization"
+            ],
+            "self_check": [
+              "Does the dashboard load in under 2 seconds with up to 20 widgets?",
+              "Is the widget customization intuitive?"
+            ]
+          }
+        },
+        {
+          "title": "Implement widget drag-and-drop functionality",
+          "description": "Enable rearranging of widgets via drag-and-drop on the dashboard.",
+          "acceptance_criteria": [
+            "Widgets can be rearranged via drag-and-drop",
+            "Changes persist after page refresh"
+          ],
+          "size": "M",
+          "priority": "high",
+          "labels": [
+            "frontend",
+            "ui",
+            "drag-and-drop"
+          ],
+          "requirement_ids": [
+            "REQ-001"
+          ],
+          "agent_context": {
+            "goal": "Allow users to organize their dashboard layout according to their preferences.",
+            "exploration_paths": [
+              "drag-and-drop library",
+              "state management"
+            ],
+            "exploration_hints": [
+              "src/components/widgets/",
+              "src/state/"
+            ],
+            "known_patterns": [
+              "Use existing drag-and-drop libraries"
+            ],
+            "verification_tests": [
+              "test_widget_rearrangement"
+            ],
+            "self_check": [
+              "Are widget positions saved correctly?",
+              "Is the drag-and-drop experience smooth and responsive?"
+            ]
+          }
+        },
+        {
+          "title": "Implement global filters and auto-refresh toggle",
+          "description": "Add date range selector and auto-refresh toggle to the dashboard.",
+          "acceptance_criteria": [
+            "Includes date range selector as a global filter",
+            "Includes auto-refresh toggle"
+          ],
+          "size": "M",
+          "priority": "high",
+          "labels": [
+            "frontend",
+            "ui",
+            "filters"
+          ],
+          "requirement_ids": [
+            "REQ-001"
+          ],
+          "agent_context": {
+            "goal": "Provide users with tools to filter data and keep it updated in real-time.",
+            "exploration_paths": [
+              "date range picker",
+              "auto-refresh mechanism"
+            ],
+            "exploration_hints": [
+              "src/components/filters/",
+              "src/utils/refresh/"
+            ],
+            "known_patterns": [
+              "Use existing date picker libraries"
+            ],
+            "verification_tests": [
+              "test_date_range_filter",
+              "test_auto_refresh_toggle"
+            ],
+            "self_check": [
+              "Does the date range filter apply to all widgets?",
+              "Is the auto-refresh toggle intuitive and functional?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "dashboard",
+        "customization",
+        "ui"
+      ]
+    },
+    {
+      "title": "Widget Library and Customization",
+      "description": "Provide pre-built widgets and allow users to create custom widgets.",
+      "stories": [
+        {
+          "title": "Develop pre-built widgets",
+          "description": "Create a set of pre-built widgets for data visualization.",
+          "acceptance_criteria": [
+            "Includes Key Metrics widget with 4 configurable big numbers",
+            "Includes Line Chart for time series data",
+            "Includes Bar Chart for category comparison",
+            "Includes Pie Chart for distribution breakdown",
+            "Includes Data Table with sortable and filterable rows",
+            "Includes Funnel for conversion visualization"
+          ],
+          "size": "L",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "widgets",
+            "visualization"
+          ],
+          "requirement_ids": [
+            "REQ-002"
+          ],
+          "agent_context": {
+            "goal": "Provide users with a variety of pre-built widgets for immediate data visualization.",
+            "exploration_paths": [
+              "data visualization",
+              "widget library"
+            ],
+            "exploration_hints": [
+              "src/components/widgets/prebuilt/"
+            ],
+            "known_patterns": [
+              "Use existing chart libraries"
+            ],
+            "verification_tests": [
+              "test_prebuilt_widgets"
+            ],
+            "self_check": [
+              "Are all widgets functioning as expected?",
+              "Is the data visualization clear and accurate?"
+            ]
+          }
+        },
+        {
+          "title": "Implement custom widget builder",
+          "description": "Allow users to create custom widgets with various configurations.",
+          "acceptance_criteria": [
+            "Users can select data source (users, orders, events, etc.)",
+            "Users can choose visualization type",
+            "Users can configure dimensions and measures",
+            "Users can apply filters",
+            "Users can set refresh interval",
+            "Users can save widget with a custom name"
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "frontend",
+            "widgets",
+            "customization"
+          ],
+          "requirement_ids": [
+            "REQ-003"
+          ],
+          "agent_context": {
+            "goal": "Empower users to create personalized widgets tailored to their specific data needs.",
+            "exploration_paths": [
+              "custom widget creation",
+              "data source integration"
+            ],
+            "exploration_hints": [
+              "src/components/widgets/custom/"
+            ],
+            "known_patterns": [
+              "Follow existing widget creation patterns"
+            ],
+            "verification_tests": [
+              "test_custom_widget_creation"
+            ],
+            "self_check": [
+              "Are all configuration options available and functional?",
+              "Is the custom widget saved and displayed correctly?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "widgets",
+        "customization",
+        "visualization"
+      ]
+    },
+    {
+      "title": "Data Export and Sharing",
+      "description": "Enable data export and sharing capabilities for dashboards.",
+      "stories": [
+        {
+          "title": "Implement data export functionality",
+          "description": "Allow users to export widget data as PNG/PDF and underlying data as CSV/Excel.",
+          "acceptance_criteria": [
+            "Users can export widget as PNG/PDF",
+            "Users can export underlying data as CSV/Excel"
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "backend",
+            "export",
+            "data"
+          ],
+          "requirement_ids": [
+            "REQ-005"
+          ],
+          "agent_context": {
+            "goal": "Provide users with the ability to export data for offline analysis and reporting.",
+            "exploration_paths": [
+              "data export",
+              "file generation"
+            ],
+            "exploration_hints": [
+              "src/services/export/"
+            ],
+            "known_patterns": [
+              "Use existing export libraries"
+            ],
+            "verification_tests": [
+              "test_data_export"
+            ],
+            "self_check": [
+              "Are all export formats functioning correctly?",
+              "Is the exported data accurate and complete?"
+            ]
+          }
+        },
+        {
+          "title": "Develop dashboard sharing feature",
+          "description": "Allow users to share dashboards via a read-only link.",
+          "acceptance_criteria": [
+            "Users can share dashboard via link (read-only)"
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "backend",
+            "sharing",
+            "security"
+          ],
+          "requirement_ids": [
+            "REQ-005"
+          ],
+          "agent_context": {
+            "goal": "Enable users to share insights with others without compromising data security.",
+            "exploration_paths": [
+              "link sharing",
+              "access control"
+            ],
+            "exploration_hints": [
+              "src/services/sharing/"
+            ],
+            "known_patterns": [
+              "Follow existing link generation patterns"
+            ],
+            "verification_tests": [
+              "test_dashboard_sharing"
+            ],
+            "self_check": [
+              "Is the shared link secure and read-only?",
+              "Does the shared dashboard display correctly?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "export",
+        "sharing",
+        "data"
+      ]
+    },
+    {
+      "title": "Real-time Updates and Access Control",
+      "description": "Implement real-time updates and access control for the dashboard.",
+      "stories": [
+        {
+          "title": "Enable real-time data updates",
+          "description": "Ensure the dashboard reflects current data with real-time updates.",
+          "acceptance_criteria": [
+            "WebSocket connection for live updates",
+            "Visual indicator when data refreshes",
+            "Configurable refresh intervals (1min, 5min, 15min, manual)"
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "real-time",
+            "websocket"
+          ],
+          "requirement_ids": [
+            "REQ-006"
+          ],
+          "agent_context": {
+            "goal": "Keep the dashboard data up-to-date without requiring manual refreshes.",
+            "exploration_paths": [
+              "real-time updates",
+              "WebSocket implementation"
+            ],
+            "exploration_hints": [
+              "src/services/real-time/"
+            ],
+            "known_patterns": [
+              "Use WebSocket for live data"
+            ],
+            "verification_tests": [
+              "test_real_time_updates"
+            ],
+            "self_check": [
+              "Is the WebSocket connection stable and reliable?",
+              "Are refresh intervals configurable and respected?"
+            ]
+          }
+        },
+        {
+          "title": "Implement dashboard access control",
+          "description": "Implement access control for dashboard and data security.",
+          "acceptance_criteria": [
+            "Dashboard-level permissions (view, edit, admin)",
+            "Data-level row security based on user role",
+            "Audit log of dashboard access"
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "security",
+            "auth"
+          ],
+          "requirement_ids": [
+            "REQ-007"
+          ],
+          "agent_context": {
+            "goal": "Ensure that only authorized users can access and modify dashboard data.",
+            "exploration_paths": [
+              "access control",
+              "role-based security"
+            ],
+            "exploration_hints": [
+              "src/services/auth/",
+              "src/services/security/"
+            ],
+            "known_patterns": [
+              "Use role-based access control"
+            ],
+            "verification_tests": [
+              "test_access_control"
+            ],
+            "self_check": [
+              "Are permissions correctly enforced?",
+              "Is the audit log comprehensive and secure?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "real-time",
+        "security",
+        "auth"
+      ]
+    }
+  ],
+  "metadata": {
+    "generated_at": "2026-02-15T19:27:16.965822+00:00",
+    "prompt_version": "1.6.0",
+    "model": "gpt-4o",
+    "requirement_count": 7,
+    "story_count": 9,
+    "usage": {
+      "prompt_tokens": 2309,
+      "completion_tokens": 2288,
+      "total_tokens": 4597
+    }
+  }
+}

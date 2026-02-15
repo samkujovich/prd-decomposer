@@ -1,0 +1,309 @@
+{
+  "epics": [
+    {
+      "title": "Notification UI Enhancements",
+      "description": "Implement a comprehensive notification system with a bell icon, dropdown, and full page view.",
+      "stories": [
+        {
+          "title": "Add Notification Bell Icon to Header",
+          "description": "Implement a notification bell icon in the header with an unread count badge and animation for new notifications.",
+          "acceptance_criteria": [
+            "Notification bell icon is visible in the header",
+            "Unread count badge displays up to '99+'",
+            "Bell animates briefly when a new notification arrives",
+            "Positioned on the right side of the header before the user avatar"
+          ],
+          "size": "M",
+          "priority": "high",
+          "labels": [
+            "frontend",
+            "ui"
+          ],
+          "requirement_ids": [
+            "REQ-001"
+          ],
+          "agent_context": {
+            "goal": "Enhance user engagement by providing a visual cue for new notifications.",
+            "exploration_paths": [
+              "notification UI",
+              "header design"
+            ],
+            "exploration_hints": [
+              "src/components/header/",
+              "src/styles/"
+            ],
+            "known_patterns": [
+              "Use existing icon library",
+              "Follow animation guidelines"
+            ],
+            "verification_tests": [
+              "test_notification_bell_visibility",
+              "test_unread_count_display"
+            ],
+            "self_check": [
+              "Is the bell icon visible on all screen sizes?",
+              "Does the animation meet performance standards?"
+            ]
+          }
+        },
+        {
+          "title": "Implement Notification Dropdown",
+          "description": "Create a dropdown showing recent notifications with navigation and management options.",
+          "acceptance_criteria": [
+            "Dropdown shows a list of the last 20 notifications",
+            "Each notification displays an icon, title, timestamp, and read/unread state",
+            "'Mark all as read' link is present at the top",
+            "'View all' link is present at the bottom",
+            "Clicking a notification navigates to the relevant page"
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "frontend",
+            "ui",
+            "navigation"
+          ],
+          "requirement_ids": [
+            "REQ-002"
+          ],
+          "agent_context": {
+            "goal": "Provide users with quick access to recent notifications and management options.",
+            "exploration_paths": [
+              "dropdown UI",
+              "notification management"
+            ],
+            "exploration_hints": [
+              "src/components/notifications/",
+              "src/pages/notifications/"
+            ],
+            "known_patterns": [
+              "Use dropdown component",
+              "Implement list navigation"
+            ],
+            "verification_tests": [
+              "test_notification_dropdown_display",
+              "test_navigation_links"
+            ],
+            "self_check": [
+              "Does the dropdown handle large notification lists efficiently?",
+              "Are navigation links correctly routed?"
+            ]
+          }
+        },
+        {
+          "title": "Create Full Notification Page",
+          "description": "Develop a full notification page with pagination, filtering, bulk actions, and search capabilities.",
+          "acceptance_criteria": [
+            "Page displays all notifications with pagination (20 per page)",
+            "Users can filter notifications by type and read/unread status",
+            "Bulk actions available: mark selected as read, delete selected",
+            "Search functionality by keyword is available"
+          ],
+          "size": "L",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "ui",
+            "search"
+          ],
+          "requirement_ids": [
+            "REQ-003"
+          ],
+          "agent_context": {
+            "goal": "Allow users to manage and search through all their notifications efficiently.",
+            "exploration_paths": [
+              "pagination",
+              "filtering",
+              "bulk actions",
+              "search"
+            ],
+            "exploration_hints": [
+              "src/pages/notifications/",
+              "src/components/search/"
+            ],
+            "known_patterns": [
+              "Use pagination library",
+              "Implement search with debounce"
+            ],
+            "verification_tests": [
+              "test_notification_page_pagination",
+              "test_search_functionality"
+            ],
+            "self_check": [
+              "Is pagination smooth and responsive?",
+              "Are search results accurate and fast?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "notifications",
+        "ui"
+      ]
+    },
+    {
+      "title": "Notification Delivery and Preferences",
+      "description": "Implement real-time notification delivery and customizable user preferences.",
+      "stories": [
+        {
+          "title": "Implement Real-time Notification Delivery",
+          "description": "Enable real-time notification delivery using WebSocket with fallback mechanisms.",
+          "acceptance_criteria": [
+            "Notifications appear instantly using WebSocket",
+            "Fallback to polling if WebSocket fails",
+            "Toast notification for high-priority items",
+            "Subtle sound plays for notifications, with user option to disable"
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "realtime",
+            "websocket"
+          ],
+          "requirement_ids": [
+            "REQ-005"
+          ],
+          "agent_context": {
+            "goal": "Ensure users receive notifications in real-time to improve engagement.",
+            "exploration_paths": [
+              "WebSocket",
+              "polling",
+              "notification sound"
+            ],
+            "exploration_hints": [
+              "src/services/notifications/",
+              "src/utils/websocket/"
+            ],
+            "known_patterns": [
+              "Use existing WebSocket library",
+              "Implement fallback polling"
+            ],
+            "verification_tests": [
+              "test_realtime_notification_delivery",
+              "test_fallback_mechanism"
+            ],
+            "self_check": [
+              "Does the fallback mechanism activate correctly?",
+              "Is the notification sound user-friendly?"
+            ]
+          }
+        },
+        {
+          "title": "Develop Notification Preferences Settings",
+          "description": "Allow users to customize notification settings including type toggles, delivery methods, and quiet hours.",
+          "acceptance_criteria": [
+            "Users can toggle each notification type on/off",
+            "Users can choose delivery method per type: in-app, email, both, none",
+            "Users can set quiet hours for no push notifications",
+            "Email digest options: immediate, daily, weekly, never"
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "settings",
+            "preferences"
+          ],
+          "requirement_ids": [
+            "REQ-006"
+          ],
+          "agent_context": {
+            "goal": "Provide users with control over how and when they receive notifications.",
+            "exploration_paths": [
+              "user settings",
+              "notification preferences"
+            ],
+            "exploration_hints": [
+              "src/components/settings/",
+              "src/pages/preferences/"
+            ],
+            "known_patterns": [
+              "Use settings management library",
+              "Implement toggle switches"
+            ],
+            "verification_tests": [
+              "test_notification_preferences_ui",
+              "test_quiet_hours_setting"
+            ],
+            "self_check": [
+              "Are preference changes saved and applied correctly?",
+              "Is the UI intuitive for all user types?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "notifications",
+        "realtime",
+        "preferences"
+      ]
+    },
+    {
+      "title": "Mobile Notification Support",
+      "description": "Ensure notifications are mobile-friendly with responsive design and touch interactions.",
+      "stories": [
+        {
+          "title": "Optimize Notification UI for Mobile",
+          "description": "Ensure the notification dropdown and interactions are mobile-friendly.",
+          "acceptance_criteria": [
+            "Responsive dropdown design for mobile",
+            "Touch-friendly tap targets",
+            "Swipe to dismiss notifications on mobile"
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "mobile",
+            "responsive"
+          ],
+          "requirement_ids": [
+            "REQ-007"
+          ],
+          "agent_context": {
+            "goal": "Ensure users have a seamless notification experience on mobile devices.",
+            "exploration_paths": [
+              "responsive design",
+              "mobile UI",
+              "touch interactions"
+            ],
+            "exploration_hints": [
+              "src/components/mobile/",
+              "src/styles/responsive/"
+            ],
+            "known_patterns": [
+              "Use responsive design frameworks",
+              "Implement touch event handlers"
+            ],
+            "verification_tests": [
+              "test_mobile_notification_ui",
+              "test_swipe_dismiss"
+            ],
+            "self_check": [
+              "Is the UI responsive on all mobile devices?",
+              "Are touch interactions smooth and intuitive?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "notifications",
+        "mobile",
+        "responsive"
+      ]
+    }
+  ],
+  "metadata": {
+    "generated_at": "2026-02-15T19:26:43.789043+00:00",
+    "prompt_version": "1.6.0",
+    "model": "gpt-4o",
+    "requirement_count": 7,
+    "story_count": 6,
+    "usage": {
+      "prompt_tokens": 2252,
+      "completion_tokens": 1741,
+      "total_tokens": 3993
+    }
+  }
+}

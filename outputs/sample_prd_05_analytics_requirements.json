@@ -1,0 +1,133 @@
+{
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "title": "Dashboard Home",
+      "description": "Create a main dashboard view at /analytics with customizable widgets and global filters.",
+      "acceptance_criteria": [
+        "Dashboard accessible at /analytics",
+        "Supports grid of customizable widgets",
+        "Widgets can be rearranged via drag-and-drop",
+        "Includes add/remove widgets button",
+        "Includes date range selector as a global filter",
+        "Includes auto-refresh toggle"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [
+        {
+          "category": "vague_quantifier",
+          "issue": "'load quickly' is not defined with specific performance metrics",
+          "severity": "warning",
+          "suggested_action": "Define acceptable load time, e.g., 'Dashboard loads in under 2 seconds with up to 20 widgets'"
+        }
+      ],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-002",
+      "title": "Pre-built Widgets",
+      "description": "Provide a set of pre-built widgets for data visualization.",
+      "acceptance_criteria": [
+        "Includes Key Metrics widget with 4 configurable big numbers",
+        "Includes Line Chart for time series data",
+        "Includes Bar Chart for category comparison",
+        "Includes Pie Chart for distribution breakdown",
+        "Includes Data Table with sortable and filterable rows",
+        "Includes Funnel for conversion visualization"
+      ],
+      "dependencies": [
+        "REQ-001"
+      ],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-003",
+      "title": "Custom Widget Builder",
+      "description": "Allow users to create custom widgets with various configurations.",
+      "acceptance_criteria": [
+        "Users can select data source (users, orders, events, etc.)",
+        "Users can choose visualization type",
+        "Users can configure dimensions and measures",
+        "Users can apply filters",
+        "Users can set refresh interval",
+        "Users can save widget with a custom name"
+      ],
+      "dependencies": [
+        "REQ-001"
+      ],
+      "ambiguity_flags": [],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-004",
+      "title": "Date Range Controls",
+      "description": "Support flexible date selection for data filtering.",
+      "acceptance_criteria": [
+        "Includes presets for Today, Yesterday, Last 7/30/90 days, This month, Last month",
+        "Includes custom range picker with calendar",
+        "Includes compare to previous period toggle",
+        "Date range can be applied to all widgets or a single widget"
+      ],
+      "dependencies": [
+        "REQ-001"
+      ],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-005",
+      "title": "Export Capabilities",
+      "description": "Allow users to export data and share dashboards.",
+      "acceptance_criteria": [
+        "Users can export widget as PNG/PDF",
+        "Users can export underlying data as CSV/Excel",
+        "Users can schedule automated email reports (daily/weekly/monthly)",
+        "Users can share dashboard via link (read-only)"
+      ],
+      "dependencies": [
+        "REQ-001"
+      ],
+      "ambiguity_flags": [],
+      "priority": "medium"
+    },
+    {
+      "id": "REQ-006",
+      "title": "Real-time Updates",
+      "description": "Ensure the dashboard reflects current data with real-time updates.",
+      "acceptance_criteria": [
+        "WebSocket connection for live updates",
+        "Visual indicator when data refreshes",
+        "Configurable refresh intervals (1min, 5min, 15min, manual)"
+      ],
+      "dependencies": [
+        "REQ-001"
+      ],
+      "ambiguity_flags": [],
+      "priority": "high"
+    },
+    {
+      "id": "REQ-007",
+      "title": "Access Control",
+      "description": "Implement access control for dashboard and data security.",
+      "acceptance_criteria": [
+        "Dashboard-level permissions (view, edit, admin)",
+        "Data-level row security based on user role",
+        "Audit log of dashboard access"
+      ],
+      "dependencies": [],
+      "ambiguity_flags": [],
+      "priority": "high"
+    }
+  ],
+  "summary": "Develop a self-service analytics dashboard for real-time data visualization and insights generation, reducing dependency on support for report requests.",
+  "source_hash": "e859e8c0",
+  "_metadata": {
+    "analyzed_at": "2026-02-15T19:26:52.080786+00:00",
+    "prompt_version": "1.6.0",
+    "model": "gpt-4o",
+    "prompt_tokens": 1229,
+    "completion_tokens": 953,
+    "total_tokens": 2182
+  }
+}

@@ -1,0 +1,578 @@
+{
+  "epics": [
+    {
+      "title": "Tier-Based Rate Limiting System",
+      "description": "Implement a tier-based rate limiting system for the public API to prevent abuse, ensure fair usage, and protect backend services.",
+      "stories": [
+        {
+          "title": "Implement Free Tier Rate Limits",
+          "description": "Set up rate limits for the Free tier: 100 requests per minute and 1,000 requests per day.",
+          "acceptance_criteria": [
+            "Free tier users are limited to 100 requests per minute",
+            "Free tier users are limited to 1,000 requests per day"
+          ],
+          "size": "M",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "api",
+            "rate-limiting"
+          ],
+          "requirement_ids": [
+            "REQ-001"
+          ],
+          "agent_context": {
+            "goal": "Prevent abuse by limiting API usage for free tier users.",
+            "exploration_paths": [
+              "rate limiting",
+              "API usage",
+              "tier-based access"
+            ],
+            "exploration_hints": [
+              "src/rate_limiting/",
+              "config/tier_limits.json"
+            ],
+            "known_patterns": [
+              "Use Redis for tracking request counts"
+            ],
+            "verification_tests": [
+              "test_free_tier_limits"
+            ],
+            "self_check": [
+              "Are the limits correctly enforced?",
+              "What happens if Redis is down?",
+              "How are limits reset daily?"
+            ]
+          }
+        },
+        {
+          "title": "Implement Pro Tier Rate Limits",
+          "description": "Set up rate limits for the Pro tier: 1,000 requests per minute and unlimited daily requests.",
+          "acceptance_criteria": [
+            "Pro tier users are limited to 1,000 requests per minute",
+            "Pro tier users have unlimited daily requests"
+          ],
+          "size": "M",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "api",
+            "rate-limiting"
+          ],
+          "requirement_ids": [
+            "REQ-001"
+          ],
+          "agent_context": {
+            "goal": "Ensure fair usage for Pro tier users while allowing higher request rates.",
+            "exploration_paths": [
+              "rate limiting",
+              "API usage",
+              "tier-based access"
+            ],
+            "exploration_hints": [
+              "src/rate_limiting/",
+              "config/tier_limits.json"
+            ],
+            "known_patterns": [
+              "Use Redis for tracking request counts"
+            ],
+            "verification_tests": [
+              "test_pro_tier_limits"
+            ],
+            "self_check": [
+              "Are the limits correctly enforced?",
+              "How is the unlimited daily request feature implemented?"
+            ]
+          }
+        },
+        {
+          "title": "Implement Enterprise Tier Custom Limits",
+          "description": "Allow custom rate limits for Enterprise tier customers as configured per customer.",
+          "acceptance_criteria": [
+            "Enterprise tier users have custom rate limits configured per customer"
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "api",
+            "rate-limiting"
+          ],
+          "requirement_ids": [
+            "REQ-001"
+          ],
+          "agent_context": {
+            "goal": "Provide flexibility for enterprise customers to have custom rate limits.",
+            "exploration_paths": [
+              "rate limiting",
+              "API usage",
+              "enterprise customization"
+            ],
+            "exploration_hints": [
+              "src/rate_limiting/",
+              "config/enterprise_limits.json"
+            ],
+            "known_patterns": [
+              "Use Redis for tracking request counts"
+            ],
+            "verification_tests": [
+              "test_enterprise_tier_limits"
+            ],
+            "self_check": [
+              "Are custom limits correctly applied per customer?",
+              "How are changes to custom limits handled?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "api",
+        "rate-limiting",
+        "backend"
+      ]
+    },
+    {
+      "title": "Rate Limit Response Headers",
+      "description": "Include rate limit information in all API responses to inform clients of their usage status.",
+      "stories": [
+        {
+          "title": "Add Rate Limit Headers to API Responses",
+          "description": "Include X-RateLimit-Limit, X-RateLimit-Remaining, and X-RateLimit-Reset headers in all API responses.",
+          "acceptance_criteria": [
+            "API responses include X-RateLimit-Limit header",
+            "API responses include X-RateLimit-Remaining header",
+            "API responses include X-RateLimit-Reset header"
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "backend",
+            "api",
+            "headers"
+          ],
+          "requirement_ids": [
+            "REQ-002"
+          ],
+          "agent_context": {
+            "goal": "Inform API clients about their current rate limit status.",
+            "exploration_paths": [
+              "HTTP headers",
+              "API response modification"
+            ],
+            "exploration_hints": [
+              "src/middleware/rate_limit_headers.js"
+            ],
+            "known_patterns": [
+              "Follow HTTP header standards"
+            ],
+            "verification_tests": [
+              "test_rate_limit_headers"
+            ],
+            "self_check": [
+              "Are headers correctly formatted and included in responses?",
+              "How do headers behave under different tier limits?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "api",
+        "headers"
+      ]
+    },
+    {
+      "title": "Rate Limit Exceeded Handling",
+      "description": "Define the response behavior when a client exceeds their rate limit.",
+      "stories": [
+        {
+          "title": "Handle Rate Limit Exceeded Responses",
+          "description": "Return HTTP 429 status code with Retry-After header and JSON error body when rate limit is exceeded.",
+          "acceptance_criteria": [
+            "Return HTTP 429 status code when limit exceeded",
+            "Include Retry-After header with seconds until reset",
+            "Return JSON error body with clear message and documentation link"
+          ],
+          "size": "M",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "api",
+            "error-handling"
+          ],
+          "requirement_ids": [
+            "REQ-003"
+          ],
+          "agent_context": {
+            "goal": "Provide clear feedback to clients when they exceed rate limits.",
+            "exploration_paths": [
+              "HTTP status codes",
+              "API error handling"
+            ],
+            "exploration_hints": [
+              "src/middleware/rate_limit_exceeded.js"
+            ],
+            "known_patterns": [
+              "Use standard HTTP 429 for rate limiting"
+            ],
+            "verification_tests": [
+              "test_rate_limit_exceeded"
+            ],
+            "self_check": [
+              "Is the Retry-After header correctly calculated?",
+              "Does the JSON error body provide useful information?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "api",
+        "error-handling"
+      ]
+    },
+    {
+      "title": "Developer Dashboard for API Usage",
+      "description": "Provide a dashboard for developers to view and manage their API usage and limits.",
+      "stories": [
+        {
+          "title": "Create Developer Dashboard UI",
+          "description": "Develop a user-friendly dashboard UI for developers to view current usage and limits.",
+          "acceptance_criteria": [
+            "Developers can view current usage and limits",
+            "Dashboard is user-friendly and intuitive"
+          ],
+          "size": "L",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "dashboard",
+            "ui"
+          ],
+          "requirement_ids": [
+            "REQ-004"
+          ],
+          "agent_context": {
+            "goal": "Enable developers to easily monitor their API usage and limits.",
+            "exploration_paths": [
+              "dashboard design",
+              "UI/UX",
+              "API usage visualization"
+            ],
+            "exploration_hints": [
+              "src/components/dashboard/",
+              "src/pages/developer_dashboard.js"
+            ],
+            "known_patterns": [
+              "Follow existing UI design patterns"
+            ],
+            "verification_tests": [
+              "test_dashboard_ui"
+            ],
+            "self_check": [
+              "Is the dashboard intuitive and easy to navigate?",
+              "Does it accurately reflect API usage data?"
+            ]
+          }
+        },
+        {
+          "title": "Implement Historical Usage Graphs",
+          "description": "Add graphs to the dashboard to show historical API usage over time.",
+          "acceptance_criteria": [
+            "Developers can see historical usage graphs"
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "frontend",
+            "dashboard",
+            "visualization"
+          ],
+          "requirement_ids": [
+            "REQ-004"
+          ],
+          "agent_context": {
+            "goal": "Provide visual insights into API usage trends over time.",
+            "exploration_paths": [
+              "data visualization",
+              "historical data",
+              "graphs"
+            ],
+            "exploration_hints": [
+              "src/components/dashboard/graphs.js"
+            ],
+            "known_patterns": [
+              "Use existing charting library"
+            ],
+            "verification_tests": [
+              "test_historical_usage_graphs"
+            ],
+            "self_check": [
+              "Are the graphs accurate and informative?",
+              "How is historical data fetched and displayed?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "dashboard",
+        "frontend"
+      ]
+    },
+    {
+      "title": "Backend Implementation for Rate Limiting",
+      "description": "Implement the technical backend for rate limiting using Redis and support additional features.",
+      "stories": [
+        {
+          "title": "Set Up Redis for Rate Limiting",
+          "description": "Configure Redis to store rate limit counters and support configurable limits per endpoint.",
+          "acceptance_criteria": [
+            "Use Redis for storing rate limit counters",
+            "Support configurable limits per endpoint"
+          ],
+          "size": "L",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "redis",
+            "rate-limiting"
+          ],
+          "requirement_ids": [
+            "REQ-005"
+          ],
+          "agent_context": {
+            "goal": "Efficiently track and enforce rate limits using Redis.",
+            "exploration_paths": [
+              "Redis configuration",
+              "rate limiting storage"
+            ],
+            "exploration_hints": [
+              "src/rate_limiting/redis_setup.js"
+            ],
+            "known_patterns": [
+              "Use Redis as a key-value store for counters"
+            ],
+            "verification_tests": [
+              "test_redis_rate_limiting"
+            ],
+            "self_check": [
+              "Is Redis configured correctly for high availability?",
+              "How are limits configured per endpoint?"
+            ]
+          }
+        },
+        {
+          "title": "Implement Bypass Mechanism for Internal Services",
+          "description": "Create a mechanism to bypass rate limits for internal services.",
+          "acceptance_criteria": [
+            "Implement bypass mechanism for internal services"
+          ],
+          "size": "M",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "rate-limiting",
+            "internal-services"
+          ],
+          "requirement_ids": [
+            "REQ-005"
+          ],
+          "agent_context": {
+            "goal": "Allow internal services to operate without being affected by rate limits.",
+            "exploration_paths": [
+              "bypass mechanisms",
+              "internal service access"
+            ],
+            "exploration_hints": [
+              "src/rate_limiting/bypass.js"
+            ],
+            "known_patterns": [
+              "Whitelist internal IPs or service tokens"
+            ],
+            "verification_tests": [
+              "test_internal_service_bypass"
+            ],
+            "self_check": [
+              "Is the bypass mechanism secure?",
+              "How are internal services identified?"
+            ]
+          }
+        },
+        {
+          "title": "Log and Alert on Rate Limit Approaches",
+          "description": "Log and alert when customers approach or exceed their rate limits.",
+          "acceptance_criteria": [
+            "Log and alert when customers approach or exceed limits"
+          ],
+          "size": "M",
+          "priority": "high",
+          "labels": [
+            "backend",
+            "logging",
+            "alerting"
+          ],
+          "requirement_ids": [
+            "REQ-005"
+          ],
+          "agent_context": {
+            "goal": "Proactively manage and respond to potential rate limit breaches.",
+            "exploration_paths": [
+              "logging",
+              "alerting",
+              "rate limit monitoring"
+            ],
+            "exploration_hints": [
+              "src/logging/rate_limit_alerts.js"
+            ],
+            "known_patterns": [
+              "Use existing logging and alerting frameworks"
+            ],
+            "verification_tests": [
+              "test_rate_limit_alerts"
+            ],
+            "self_check": [
+              "Are alerts triggered at the correct thresholds?",
+              "How are logs stored and accessed?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "backend",
+        "redis",
+        "logging"
+      ]
+    },
+    {
+      "title": "Monitoring and Observability for Rate Limiting",
+      "description": "Implement monitoring and observability for the rate limiting system.",
+      "stories": [
+        {
+          "title": "Emit Metrics for Rate Limit Checks",
+          "description": "Emit metrics for rate limit checks, passes, and rejections.",
+          "acceptance_criteria": [
+            "Emit metrics for rate limit checks, passes, and rejections"
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "monitoring",
+            "metrics",
+            "backend"
+          ],
+          "requirement_ids": [
+            "REQ-006"
+          ],
+          "agent_context": {
+            "goal": "Gain insights into rate limit operations and performance.",
+            "exploration_paths": [
+              "metrics collection",
+              "rate limit monitoring"
+            ],
+            "exploration_hints": [
+              "src/monitoring/metrics.js"
+            ],
+            "known_patterns": [
+              "Use existing metrics collection framework"
+            ],
+            "verification_tests": [
+              "test_rate_limit_metrics"
+            ],
+            "self_check": [
+              "Are all relevant metrics captured?",
+              "How are metrics visualized and accessed?"
+            ]
+          }
+        },
+        {
+          "title": "Create Dashboards for Rate Limit Health",
+          "description": "Develop dashboards to show the health and performance of the rate limiting system.",
+          "acceptance_criteria": [
+            "Create dashboards showing rate limit health"
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "monitoring",
+            "dashboard",
+            "visualization"
+          ],
+          "requirement_ids": [
+            "REQ-006"
+          ],
+          "agent_context": {
+            "goal": "Provide a visual overview of the rate limiting system's health.",
+            "exploration_paths": [
+              "dashboard creation",
+              "system health visualization"
+            ],
+            "exploration_hints": [
+              "src/monitoring/dashboards.js"
+            ],
+            "known_patterns": [
+              "Use existing dashboard framework"
+            ],
+            "verification_tests": [
+              "test_rate_limit_dashboards"
+            ],
+            "self_check": [
+              "Are dashboards comprehensive and easy to interpret?",
+              "How are real-time updates handled?"
+            ]
+          }
+        },
+        {
+          "title": "Alert on Anomalies in Rate Limiting",
+          "description": "Set up alerts for anomalies such as sudden spikes in rejections or Redis failures.",
+          "acceptance_criteria": [
+            "Alert on anomalies such as sudden spikes in rejections or Redis failures"
+          ],
+          "size": "M",
+          "priority": "medium",
+          "labels": [
+            "monitoring",
+            "alerting",
+            "anomaly-detection"
+          ],
+          "requirement_ids": [
+            "REQ-006"
+          ],
+          "agent_context": {
+            "goal": "Quickly detect and respond to unusual rate limiting activity.",
+            "exploration_paths": [
+              "anomaly detection",
+              "alerting"
+            ],
+            "exploration_hints": [
+              "src/monitoring/alerts.js"
+            ],
+            "known_patterns": [
+              "Use existing alerting framework"
+            ],
+            "verification_tests": [
+              "test_rate_limit_anomalies"
+            ],
+            "self_check": [
+              "Are alerts triggered correctly for anomalies?",
+              "How are alerts communicated to the team?"
+            ]
+          }
+        }
+      ],
+      "labels": [
+        "monitoring",
+        "observability"
+      ]
+    }
+  ],
+  "metadata": {
+    "generated_at": "2026-02-15T19:25:14.367471+00:00",
+    "prompt_version": "1.6.0",
+    "model": "gpt-4o",
+    "requirement_count": 6,
+    "story_count": 13,
+    "usage": {
+      "prompt_tokens": 2206,
+      "completion_tokens": 3248,
+      "total_tokens": 5454
+    }
+  }
+}
