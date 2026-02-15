@@ -15,11 +15,14 @@ This document tracks AI tool usage during development of prd-decomposer.
 - `src/prd_decomposer/models.py` - Pydantic model definitions
 - `src/prd_decomposer/prompts.py` - LLM prompt templates
 - `src/prd_decomposer/config.py` - Settings class with environment variable support
-- `tests/test_tools.py` - Model unit tests
+- `tests/test_models.py` - Pydantic model unit tests
 - `tests/test_server.py` - Server/tool tests with mocked LLM
+- `tests/test_circuit_breaker.py` - Circuit breaker tests
+- `tests/test_export.py` - Export format tests
 - `tests/test_prompts.py` - Prompt template tests
 - `tests/test_config.py` - Configuration validation tests
 - `evals/eval_prd_tools.py` - Arcade eval suite (8 eval cases)
+- `tests/integration/test_real_api.py` - Real API integration tests
 - `docs/diagrams/architecture.*` - Architecture diagram (Excalidraw + SVG)
 - `README.md` - Documentation
 
@@ -56,6 +59,66 @@ Claude Code addressed additional code review feedback:
 - **MCP Compatibility Fix**: Changed `decompose_to_tickets` parameter from `dict` to JSON string for better agent compatibility
 - **Testing**: Expanded from 51 to 67 tests
 
+### Session 4: Export Formats, Circuit Breaker & Ambiguity Enhancements
+Claude Code implemented major feature additions from code review:
+- **Export Formats**: Added `export_tickets` tool supporting CSV, Jira REST API, and YAML output
+- **Circuit Breaker Pattern**: Implemented thread-safe circuit breaker for upstream failure protection (closed→open→half_open states)
+- **Configurable Sizing Rubric**: Added `SizingRubric` model with customizable S/M/L definitions
+- **Actionable Ambiguity Flags**: Enhanced `AmbiguityFlag` model with `severity` and `suggested_action` fields
+- **Health Check Endpoint**: Added `health_check` tool for service status monitoring
+- **Structured Logging**: Added JSON logging with correlation IDs (`log.py`)
+- **Testing**: Expanded from 67 to 132 tests
+
+### Session 5: Bug Fixes Round 1-3
+Claude Code fixed bugs identified in code review:
+- **Circuit Breaker Fixes**: Half-open slot leak prevention, proper failure recording for non-retryable errors
+- **YAML Export Fixes**: Single `epics:` key, proper escaping for quotes/newlines/backslashes, per-item list quoting
+- **Sizing Rubric Fixes**: Auto-fill labels validator, non-object JSON validation
+- **Export Validation**: Added type checks for non-object JSON inputs
+- **Testing**: Expanded from 132 to 206 tests
+
+### Session 6: Bug Fixes Round 4-6
+Claude Code fixed additional edge cases:
+- **Circuit Breaker Refinements**:
+  - 4xx client errors don't trip breaker (only transient upstream failures)
+  - Half-open probes limited to single attempt (no retries)
+  - Half-open detection after open→half_open transition
+  - Retry backoff uses effective attempt limit
+- **Health Endpoint**: Consistent "degraded" status for both open and half_open states
+- **Export Validation**: Deep nested validation for stories array and story objects
+- **Jira Export**: Moved metadata outside `issueUpdates` to comply with Jira schema
+- **YAML Export**: Consistent empty collection handling (`[]` instead of null/omitted)
+- **Testing**: Expanded from 206 to 230 tests (unit)
+
+### Session 7: Logging Initialization & Integration Tests
+Claude Code completed final polish items:
+- **Logging Initialization**: Call `setup_logging(get_settings())` at server startup for structured JSON logs
+- **Integration Tests**: Added `tests/integration/` with 4 real API tests (skipped when `OPENAI_API_KEY` not set)
+- **Documentation Review**: Updated README and AI_USAGE for accuracy
+- **Testing**: Expanded from 230 to 234 tests (230 unit + 4 integration)
+
+### Session 8: Bug Fixes Round 7-9 (Code Review)
+Claude Code fixed 11 bugs identified in code review:
+- **Jira Priority Mapping**: Handle non-string priority values (int, bool, None) by coercing to string
+- **Nested Field Validation**: Add `_validate_string_list` helper to coerce/filter story field arrays
+- **Jira Schema Compliance**: Remove `_prd_decomposer_metadata` from Jira bulk payload (breaks REST API)
+- **Circuit Breaker Half-Open 4xx**: 4xx during half-open probe closes circuit (upstream is responsive)
+- **Circuit Breaker Closed 4xx**: 4xx in closed state resets failure streak (5xx/4xx/5xx not 3 consecutive failures)
+- **Scalar Field Validation**: Add `_validate_string_field` helper for title/description validation
+- **Shutdown Circuit Breaker**: Move shutdown check before `llm_call_attempted` flag to prevent false failures
+- **YAML Size/Priority Escaping**: Quote and escape size/priority fields in YAML export
+- **Empty String Validation**: Reject empty strings for required fields (title)
+- **Lazy Logging Init**: Move `setup_logging()` from import-time to runtime via `_ensure_logging_initialized()`
+- **Null Stories Handling**: Normalize `stories: null` to `[]` during export validation
+- **Testing**: Expanded from 234 to 263 tests (259 unit + 4 integration)
+
+### Session 9: Production Hardening & Test Reorganization
+Claude Code addressed final code review feedback:
+- **Production Hardening**: Moved `_logging_initialized` reset to conftest, removed misleading `__all__`, added exception chaining with `from e`, switched to `time.monotonic()` for elapsed time, reverted to single user message pattern for LLM calls
+- **Export Cleanup**: Changed `_comment` to `_metadata` in YAML export, simplified `_map_priority_to_jira` to trust Pydantic validation
+- **Test Reorganization**: Extracted circuit breaker tests to `test_circuit_breaker.py` and export tests to `test_export.py` to mirror source structure per CLAUDE.md conventions
+- **Testing**: 243 tests (239 unit + 4 integration) after reorganization
+
 ## Prompts Used
 
 Key prompts used during development:
@@ -86,7 +149,7 @@ This prompt pattern is adapted from the [Agentic Code Reviewer](https://github.c
 ## Quality Assurance
 
 - All AI-generated code was reviewed before committing
-- 67 unit tests with 98% code coverage
+- 243 tests (239 unit + 4 integration) with comprehensive coverage
 - Arcade evals validate tool selection (8 eval cases)
 - Security review for path traversal and injection risks
 - Error handling review for LLM failure scenarios

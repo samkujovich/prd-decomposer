@@ -2,8 +2,11 @@ import pytest
 from pydantic import ValidationError
 
 from prd_decomposer.models import (
+    AmbiguityFlag,
     Epic,
     Requirement,
+    SizeDefinition,
+    SizingRubric,
     Story,
     StructuredRequirements,
     TicketCollection,
@@ -62,13 +65,19 @@ def test_structured_requirements_model():
 
 def test_structured_requirements_serialization():
     """Verify StructuredRequirements round-trips through JSON."""
+    flag = AmbiguityFlag(
+        category="vague_quantifier",
+        issue="Missing metrics",
+        severity="warning",
+        suggested_action="Add specific metrics",
+    )
     req = Requirement(
         id="REQ-001",
         title="Test",
         description="Desc",
         acceptance_criteria=[],
         dependencies=[],
-        ambiguity_flags=["Missing metrics"],
+        ambiguity_flags=[flag],
         priority="low",
     )
 
@@ -79,7 +88,8 @@ def test_structured_requirements_serialization():
     restored = StructuredRequirements.model_validate_json(json_str)
 
     assert restored.requirements[0].id == "REQ-001"
-    assert restored.requirements[0].ambiguity_flags == ["Missing metrics"]
+    assert len(restored.requirements[0].ambiguity_flags) == 1
+    assert restored.requirements[0].ambiguity_flags[0].issue == "Missing metrics"
 
 
 def test_story_model_valid():
@@ -197,3 +207,183 @@ def test_ticket_collection_serialization():
 
     assert restored.epics[0].stories[0].size == "L"
     assert restored.epics[0].stories[0].labels == ["backend"]
+
+
+# SizingRubric tests
+
+
+def test_size_definition_valid():
+    """Verify SizeDefinition accepts valid data."""
+    size_def = SizeDefinition(
+        duration="Half day",
+        scope="Single function",
+        risk="Minimal",
+    )
+    assert size_def.duration == "Half day"
+    assert size_def.scope == "Single function"
+
+
+def test_size_definition_empty_duration_rejected():
+    """Verify SizeDefinition rejects empty duration."""
+    with pytest.raises(ValidationError):
+        SizeDefinition(
+            duration="",  # min_length=1
+            scope="Single component",
+            risk="Low",
+        )
+
+
+def test_sizing_rubric_default():
+    """Verify SizingRubric has sensible defaults."""
+    rubric = SizingRubric()
+    assert "Less than 1 day" in rubric.small.duration
+    assert "1-3 days" in rubric.medium.duration
+    assert "3-5 days" in rubric.large.duration
+
+
+def test_sizing_rubric_custom():
+    """Verify SizingRubric accepts custom definitions."""
+    rubric = SizingRubric(
+        small=SizeDefinition(
+            duration="Up to 4 hours",
+            scope="Single file",
+            risk="None",
+        ),
+        medium=SizeDefinition(
+            duration="1-2 days",
+            scope="Few files",
+            risk="Low",
+        ),
+        large=SizeDefinition(
+            duration="1 week",
+            scope="Multiple modules",
+            risk="Medium",
+        ),
+    )
+    assert rubric.small.duration == "Up to 4 hours"
+    assert rubric.large.duration == "1 week"
+
+
+def test_sizing_rubric_to_prompt_text():
+    """Verify SizingRubric formats correctly for prompt injection."""
+    rubric = SizingRubric()
+    prompt_text = rubric.to_prompt_text()
+
+    assert "S (Small):" in prompt_text
+    assert "M (Medium):" in prompt_text
+    assert "L (Large):" in prompt_text
+    assert "Less than 1 day" in prompt_text
+    assert "1-3 days" in prompt_text
+
+
+def test_sizing_rubric_json_roundtrip():
+    """Verify SizingRubric survives JSON serialization."""
+    original = SizingRubric(
+        small=SizeDefinition(duration="4h", scope="tiny", risk="none"),
+        medium=SizeDefinition(duration="2d", scope="small", risk="low"),
+        large=SizeDefinition(duration="5d", scope="big", risk="high"),
+    )
+    json_str = original.model_dump_json()
+    restored = SizingRubric.model_validate_json(json_str)
+
+    assert restored.small.duration == "4h"
+    assert restored.large.risk == "high"
+
+
+# AmbiguityFlag tests
+
+
+def test_ambiguity_flag_valid():
+    """Verify AmbiguityFlag accepts valid data."""
+    flag = AmbiguityFlag(
+        category="vague_quantifier",
+        issue="'fast' has no specific latency requirement",
+        severity="warning",
+        suggested_action="Define target latency, e.g., 'under 100ms'",
+    )
+    assert flag.category == "vague_quantifier"
+    assert flag.severity == "warning"
+    assert "Define target" in flag.suggested_action
+
+
+def test_ambiguity_flag_all_categories():
+    """Verify all category values are accepted."""
+    categories = [
+        "missing_acceptance_criteria",
+        "vague_quantifier",
+        "undefined_term",
+        "missing_details",
+        "conflicting_requirements",
+        "out_of_scope",
+        "security_concern",
+        "other",
+    ]
+    for cat in categories:
+        flag = AmbiguityFlag(
+            category=cat,
+            issue="Test issue",
+            severity="warning",
+            suggested_action="Fix it",
+        )
+        assert flag.category == cat
+
+
+def test_ambiguity_flag_all_severities():
+    """Verify all severity values are accepted."""
+    for sev in ["critical", "warning", "suggestion"]:
+        flag = AmbiguityFlag(
+            category="other",
+            issue="Test",
+            severity=sev,
+            suggested_action="Fix",
+        )
+        assert flag.severity == sev
+
+
+def test_ambiguity_flag_invalid_category():
+    """Verify AmbiguityFlag rejects invalid category."""
+    with pytest.raises(ValidationError):
+        AmbiguityFlag(
+            category="unknown_category",
+            issue="Test",
+            severity="warning",
+            suggested_action="Fix",
+        )
+
+
+def test_ambiguity_flag_invalid_severity():
+    """Verify AmbiguityFlag rejects invalid severity."""
+    with pytest.raises(ValidationError):
+        AmbiguityFlag(
+            category="other",
+            issue="Test",
+            severity="low",  # Invalid - must be critical/warning/suggestion
+            suggested_action="Fix",
+        )
+
+
+def test_ambiguity_flag_empty_issue_rejected():
+    """Verify AmbiguityFlag rejects empty issue."""
+    with pytest.raises(ValidationError):
+        AmbiguityFlag(
+            category="other",
+            issue="",  # min_length=1
+            severity="warning",
+            suggested_action="Fix it",
+        )
+
+
+def test_ambiguity_flag_json_roundtrip():
+    """Verify AmbiguityFlag survives JSON serialization."""
+    original = AmbiguityFlag(
+        category="security_concern",
+        issue="No rate limiting mentioned",
+        severity="critical",
+        suggested_action="Add rate limiting requirements to prevent DoS",
+    )
+    json_str = original.model_dump_json()
+    restored = AmbiguityFlag.model_validate_json(json_str)
+
+    assert restored.category == "security_concern"
+    assert restored.severity == "critical"
+    assert "DoS" in restored.suggested_action

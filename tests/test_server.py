@@ -12,13 +12,17 @@ import pytest
 from arcade_core.errors import FatalToolError
 from openai import APIConnectionError, APIError, APITimeoutError, RateLimitError
 
+from prd_decomposer.circuit_breaker import (
+    CircuitBreaker,
+    RateLimiter,
+    RateLimitExceededError,
+)
 from prd_decomposer.config import Settings
 from prd_decomposer.log import correlation_id
+from prd_decomposer.models import SizingRubric
 from prd_decomposer.prompts import PROMPT_VERSION
 from prd_decomposer.server import (
     LLMError,
-    RateLimiter,
-    RateLimitExceededError,
     _analyze_prd_impl,
     _call_llm_with_retry,
     _decompose_to_tickets_impl,
@@ -299,7 +303,7 @@ class TestLLMRetry:
 
         settings = Settings(max_retries=3, initial_retry_delay=0.01)
         with patch("prd_decomposer.server.time.sleep"):
-            with pytest.raises(LLMError, match="failed after 3 retries"):
+            with pytest.raises(LLMError, match="failed after 3 attempts"):
                 _call_llm_with_retry(
                     [{"role": "user", "content": "test"}],
                     temperature=0.2,
@@ -319,7 +323,7 @@ class TestLLMRetry:
 
         settings = Settings(max_retries=2, initial_retry_delay=0.01)
         with patch("prd_decomposer.server.time.sleep"):
-            with pytest.raises(LLMError, match="failed after 2 retries"):
+            with pytest.raises(LLMError, match="failed after 2 attempts"):
                 _call_llm_with_retry(
                     [{"role": "user", "content": "test"}],
                     temperature=0.2,
@@ -360,7 +364,7 @@ class TestLLMRetry:
 
         settings = Settings(max_retries=2, initial_retry_delay=0.01, llm_timeout=30.0)
         with patch("prd_decomposer.server.time.sleep"):
-            with pytest.raises(LLMError, match="failed after 2 retries"):
+            with pytest.raises(LLMError, match="failed after 2 attempts"):
                 _call_llm_with_retry(
                     [{"role": "user", "content": "test"}],
                     temperature=0.2,
@@ -486,7 +490,8 @@ class TestAnalyzePrd:
         assert len(result["source_hash"]) == 8
         assert all(c in "0123456789abcdef" for c in result["source_hash"])
         assert "_metadata" in result
-        assert "usage" in result["_metadata"]
+        # Usage tokens are spread into metadata directly
+        assert "prompt_tokens" in result["_metadata"] or "total_tokens" in result["_metadata"]
         assert "prompt_version" in result["_metadata"]
 
     def test_analyze_prd_generates_source_hash(self, mock_client_factory):
@@ -509,7 +514,14 @@ class TestAnalyzePrd:
                     "description": "The API should be fast",
                     "acceptance_criteria": [],
                     "dependencies": [],
-                    "ambiguity_flags": ["Vague quantifier: 'fast' without metrics"],
+                    "ambiguity_flags": [
+                        {
+                            "category": "vague_quantifier",
+                            "issue": "'fast' without metrics",
+                            "severity": "warning",
+                            "suggested_action": "Define specific latency target",
+                        }
+                    ],
                     "priority": "high",
                 }
             ],
@@ -520,12 +532,13 @@ class TestAnalyzePrd:
 
         result = _analyze_prd_impl("The API should be fast", client=mock_client)
 
-        assert result["requirements"][0]["ambiguity_flags"] == [
-            "Vague quantifier: 'fast' without metrics"
-        ]
+        flags = result["requirements"][0]["ambiguity_flags"]
+        assert len(flags) == 1
+        assert flags[0]["category"] == "vague_quantifier"
+        assert flags[0]["issue"] == "'fast' without metrics"
 
     def test_analyze_prd_validates_llm_response(self, mock_client_factory):
-        """Verify analyze_prd raises RuntimeError for invalid LLM response."""
+        """Verify analyze_prd raises LLMError for invalid LLM response."""
         mock_response = {
             "requirements": [
                 {
@@ -539,11 +552,11 @@ class TestAnalyzePrd:
         }
         mock_client = mock_client_factory(mock_response)
 
-        with pytest.raises(RuntimeError, match="LLM returned invalid structure"):
+        with pytest.raises(LLMError, match="LLM returned invalid structure"):
             _analyze_prd_impl("Test PRD", client=mock_client)
 
     def test_analyze_prd_llm_error_propagates(self):
-        """Verify analyze_prd raises RuntimeError when LLM call fails."""
+        """Verify analyze_prd raises LLMError when LLM call fails."""
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = RateLimitError(
             message="Rate limit", response=MagicMock(status_code=429), body=None
@@ -551,7 +564,7 @@ class TestAnalyzePrd:
 
         settings = Settings(initial_retry_delay=0.01)
         with patch("prd_decomposer.server.time.sleep"):
-            with pytest.raises(RuntimeError, match="Failed to analyze PRD"):
+            with pytest.raises(LLMError, match="LLM call failed after"):
                 _analyze_prd_impl("Test PRD", client=mock_client, settings=settings)
 
     def test_analyze_prd_rejects_oversized_input(self):
@@ -560,7 +573,7 @@ class TestAnalyzePrd:
         settings = Settings(max_prd_length=1000)
         mock_client = MagicMock()
 
-        with pytest.raises(ValueError, match="exceeds maximum length"):
+        with pytest.raises(ValueError, match="exceeds limit of"):
             _analyze_prd_impl(oversized_prd, client=mock_client, settings=settings)
 
     def test_analyze_prd_accepts_input_at_max_length(self, mock_client_factory):
@@ -704,12 +717,29 @@ class TestDecomposeToTickets:
 
         assert result["metadata"]["story_count"] == 3
 
-    def test_decompose_to_tickets_validates_input(self):
-        """Verify decompose_to_tickets raises ValueError for invalid input."""
-        invalid_input = {"requirements": [{"id": "REQ-001"}]}
+    def test_decompose_to_tickets_validates_input(self, mock_client_factory):
+        """Verify decompose_to_tickets raises LLMError for invalid LLM response structure."""
+        # Pass valid input, but mock LLM to return invalid story size
+        mock_response = {
+            "epics": [
+                {
+                    "title": "Epic",
+                    "description": "Desc",
+                    "stories": [
+                        {
+                            "title": "Story",
+                            "description": "Desc",
+                            "size": "INVALID",  # Invalid size
+                        }
+                    ],
+                }
+            ]
+        }
+        mock_client = mock_client_factory(mock_response)
+        valid_input = {"requirements": [{"id": "REQ-001", "title": "T", "description": "D"}]}
 
-        with pytest.raises(ValueError, match="Invalid requirements structure"):
-            _decompose_to_tickets_impl(invalid_input, client=MagicMock())
+        with pytest.raises(LLMError, match="LLM returned invalid structure"):
+            _decompose_to_tickets_impl(valid_input, client=mock_client)
 
     @pytest.mark.parametrize("bad_input,match", [
         (None, "cannot be empty"),
@@ -735,7 +765,7 @@ class TestDecomposeToTickets:
     def test_decompose_to_tickets_validates_llm_response(
         self, sample_input_requirements, mock_client_factory
     ):
-        """Verify decompose_to_tickets raises RuntimeError for invalid LLM response."""
+        """Verify decompose_to_tickets raises LLMError for invalid LLM response."""
         mock_response = {
             "epics": [
                 {
@@ -757,16 +787,16 @@ class TestDecomposeToTickets:
         }
         mock_client = mock_client_factory(mock_response)
 
-        with pytest.raises(RuntimeError, match="LLM returned invalid ticket structure"):
+        with pytest.raises(LLMError, match="LLM returned invalid structure"):
             _decompose_to_tickets_impl(sample_input_requirements, client=mock_client)
 
     def test_decompose_to_tickets_llm_missing_epics_key(
         self, sample_input_requirements, mock_client_factory
     ):
-        """Verify decompose raises RuntimeError when LLM omits epics key."""
+        """Verify decompose raises LLMError when LLM omits epics key."""
         mock_client = mock_client_factory({"some_other_key": []})
 
-        with pytest.raises(RuntimeError, match="LLM returned invalid ticket structure"):
+        with pytest.raises(LLMError, match="LLM returned invalid structure"):
             _decompose_to_tickets_impl(sample_input_requirements, client=mock_client)
 
     def test_decompose_to_tickets_string_requirements(
@@ -792,7 +822,7 @@ class TestDecomposeToTickets:
             _decompose_to_tickets_impl("not valid json {", client=MagicMock())
 
     def test_decompose_to_tickets_llm_error_propagates(self, sample_input_requirements):
-        """Verify decompose_to_tickets raises RuntimeError when LLM call fails."""
+        """Verify decompose_to_tickets raises LLMError when LLM call fails."""
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = RateLimitError(
             message="Rate limit", response=MagicMock(status_code=429), body=None
@@ -800,10 +830,104 @@ class TestDecomposeToTickets:
 
         settings = Settings(initial_retry_delay=0.01)
         with patch("prd_decomposer.server.time.sleep"):
-            with pytest.raises(RuntimeError, match="Failed to decompose"):
+            with pytest.raises(LLMError, match="LLM call failed after"):
                 _decompose_to_tickets_impl(
                     sample_input_requirements, client=mock_client, settings=settings
                 )
+
+    def test_decompose_with_default_sizing_rubric(
+        self, sample_input_requirements, mock_client_factory, sample_epic_response
+    ):
+        """Verify default sizing rubric is used when none provided."""
+        mock_client = mock_client_factory(sample_epic_response)
+
+        # Capture the prompt sent to the LLM
+        _decompose_to_tickets_impl(sample_input_requirements, client=mock_client)
+
+        # Check that the call was made
+        call_args = mock_client.chat.completions.create.call_args
+        content = call_args.kwargs["messages"][0]["content"]
+
+        # Verify default rubric text is in the prompt
+        assert "Less than 1 day" in content
+        assert "1-3 days" in content
+        assert "3-5 days" in content
+
+    def test_decompose_with_custom_sizing_rubric_model(
+        self, sample_input_requirements, mock_client_factory, sample_epic_response
+    ):
+        """Verify custom SizingRubric model is used in prompt."""
+        mock_client = mock_client_factory(sample_epic_response)
+
+        from prd_decomposer.models import SizeDefinition
+
+        custom_rubric = SizingRubric(
+            small=SizeDefinition(label="S", duration="Up to 4 hours", scope="Single file", risk="Minimal"),
+            medium=SizeDefinition(label="M", duration="1-2 days", scope="Few modules", risk="Low"),
+            large=SizeDefinition(label="L", duration="1 week", scope="Cross-team", risk="High"),
+        )
+
+        _decompose_to_tickets_impl(
+            sample_input_requirements, client=mock_client, sizing_rubric=custom_rubric
+        )
+
+        # Check that the custom rubric was used
+        call_args = mock_client.chat.completions.create.call_args
+        content = call_args.kwargs["messages"][0]["content"]
+
+        assert "Up to 4 hours" in content
+        assert "Single file" in content
+        assert "1 week" in content
+        assert "Cross-team" in content
+
+    def test_decompose_with_custom_rubric_string(
+        self, sample_input_requirements, mock_client_factory, sample_epic_response
+    ):
+        """Verify raw string rubric is used as-is."""
+        mock_client = mock_client_factory(sample_epic_response)
+
+        custom_rubric_text = """   - S: Very quick task
+   - M: A few hours to a day
+   - L: Multiple days of work"""
+
+        _decompose_to_tickets_impl(
+            sample_input_requirements, client=mock_client, sizing_rubric=custom_rubric_text
+        )
+
+        call_args = mock_client.chat.completions.create.call_args
+        content = call_args.kwargs["messages"][0]["content"]
+
+        assert "Very quick task" in content
+        assert "Multiple days of work" in content
+
+    def test_decompose_tool_accepts_sizing_rubric_json(
+        self, sample_input_requirements, mock_client_factory, sample_epic_response
+    ):
+        """Verify decompose_to_tickets MCP tool parses sizing_rubric JSON."""
+        mock_client = mock_client_factory(sample_epic_response)
+
+        rubric_json = json.dumps({
+            "small": {"label": "S", "duration": "4h", "scope": "tiny", "risk": "none"},
+            "medium": {"label": "M", "duration": "2d", "scope": "small", "risk": "low"},
+            "large": {"label": "L", "duration": "5d", "scope": "big", "risk": "high"},
+        })
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            decompose_to_tickets(
+                json.dumps(sample_input_requirements), sizing_rubric=rubric_json
+            )
+
+        call_args = mock_client.chat.completions.create.call_args
+        content = call_args.kwargs["messages"][0]["content"]
+
+        assert "4h" in content or "tiny" in content  # Custom rubric was used
+
+    def test_decompose_tool_invalid_sizing_rubric_raises(self, sample_input_requirements):
+        """Verify decompose_to_tickets raises for invalid rubric JSON."""
+        with pytest.raises(FatalToolError, match="Invalid sizing_rubric"):
+            decompose_to_tickets(
+                json.dumps(sample_input_requirements), sizing_rubric="not valid json"
+            )
 
 
 class TestIntegrationPipeline:
@@ -972,7 +1096,7 @@ class TestServerLogging:
         settings = Settings(initial_retry_delay=0.01)
         with caplog.at_level(logging.DEBUG, logger="prd_decomposer"):
             with patch("prd_decomposer.server.time.sleep"):
-                with pytest.raises(RuntimeError):
+                with pytest.raises(LLMError):
                     _analyze_prd_impl("Test PRD", client=mock_client, settings=settings)
 
         messages = [r.message for r in caplog.records]
@@ -1095,7 +1219,11 @@ class TestMCPWrappers:
         with patch("prd_decomposer.server._decompose_to_tickets_impl") as mock_impl:
             mock_impl.return_value = {"epics": [], "metadata": {}}
             result = decompose_to_tickets('{"requirements": []}')
-            mock_impl.assert_called_once_with('{"requirements": []}')
+            mock_impl.assert_called_once()
+            # Check first positional arg is the requirements JSON
+            assert mock_impl.call_args[0][0] == '{"requirements": []}'
+            # Check sizing_rubric defaults to None
+            assert mock_impl.call_args[1].get("sizing_rubric") is None
             assert result == mock_impl.return_value
 
 
@@ -1166,56 +1294,132 @@ class TestMetadataTimestamps:
 class TestHealthCheck:
     """Tests for health_check tool."""
 
-    def test_health_check_returns_healthy_when_api_connected(self):
-        """Verify health_check returns healthy status when OpenAI API is connected."""
-        mock_client = MagicMock()
-        mock_client.models.list.return_value = MagicMock(data=[MagicMock(), MagicMock()])
-
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            result = health_check()
+    def test_health_check_returns_healthy_when_closed(self):
+        """Verify health_check returns healthy status when circuit breaker is closed."""
+        result = health_check()
 
         assert result["status"] == "healthy"
-        assert result["checks"]["openai_api"]["status"] == "connected"
-        assert result["checks"]["openai_api"]["models_available"] == 2
-        assert result["checks"]["rate_limiter"]["status"] == "ok"
+        assert result["circuit_breaker"]["state"] == "closed"
         assert "version" in result
         assert "config" in result
 
-    def test_health_check_returns_unhealthy_when_api_fails(self):
-        """Verify health_check returns unhealthy status when OpenAI API fails."""
-        mock_client = MagicMock()
-        mock_client.models.list.side_effect = Exception("API connection failed")
-
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            result = health_check()
-
-        assert result["status"] == "unhealthy"
-        assert result["checks"]["openai_api"]["status"] == "error"
-        assert "API connection failed" in result["checks"]["openai_api"]["error"]
-
     def test_health_check_includes_config_summary(self):
         """Verify health_check returns configuration summary."""
-        mock_client = MagicMock()
-        mock_client.models.list.return_value = MagicMock(data=[])
-
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
-            result = health_check()
+        result = health_check()
 
         assert "config" in result
-        assert "model" in result["config"]
+        assert "openai_model" in result["config"]
         assert "max_retries" in result["config"]
         assert "llm_timeout" in result["config"]
         assert "max_prd_length" in result["config"]
 
     def test_health_check_includes_rate_limiter_status(self):
         """Verify health_check returns rate limiter status."""
-        mock_client = MagicMock()
-        mock_client.models.list.return_value = MagicMock(data=[])
+        result = health_check()
 
-        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+        assert "rate_limiter" in result
+        assert "max_calls" in result["rate_limiter"]
+        assert "window_seconds" in result["rate_limiter"]
+
+    def test_health_check_degraded_in_half_open_state(self):
+        """Verify health_check returns degraded when circuit breaker is half-open."""
+        # Create a circuit breaker in half-open state
+        cb = CircuitBreaker(failure_threshold=1, reset_timeout=0.01)
+        cb.record_failure()  # Opens circuit
+
+        import time
+        time.sleep(0.02)  # Wait for half-open
+
+        with patch("prd_decomposer.server.get_circuit_breaker", return_value=cb):
             result = health_check()
 
-        assert "rate_limiter" in result["checks"]
-        assert "current_calls" in result["checks"]["rate_limiter"]
-        assert "max_calls" in result["checks"]["rate_limiter"]
-        assert "window_seconds" in result["checks"]["rate_limiter"]
+        assert result["circuit_breaker"]["state"] == "half_open"
+        assert result["status"] == "degraded"
+
+    def test_health_check_degraded_in_open_state(self):
+        """Verify health_check returns degraded when circuit breaker is open."""
+        # Create a circuit breaker in open state
+        cb = CircuitBreaker(failure_threshold=1, reset_timeout=60)
+        cb.record_failure()  # Opens circuit
+
+        with patch("prd_decomposer.server.get_circuit_breaker", return_value=cb):
+            result = health_check()
+
+        assert result["circuit_breaker"]["state"] == "open"
+        assert result["status"] == "degraded"
+
+
+class TestSizingRubricBugFix:
+    """Test for sizing rubric validation bug fix."""
+
+    def test_sizing_rubric_accepts_standard_format(self):
+        """Verify sizing rubric works with standard format (duration, scope, risk)."""
+        rubric_data = {
+            "small": {"duration": "4h", "scope": "tiny", "risk": "none"},
+            "medium": {"duration": "2d", "scope": "small", "risk": "low"},
+            "large": {"duration": "5d", "scope": "big", "risk": "high"},
+        }
+        rubric = SizingRubric(**rubric_data)
+
+        # Verify fields are set correctly
+        assert rubric.small.duration == "4h"
+        assert rubric.medium.scope == "small"
+        assert rubric.large.risk == "high"
+
+    def test_decompose_with_documented_rubric_format(
+        self, sample_input_requirements, mock_client_factory, sample_epic_response
+    ):
+        """Verify decompose_to_tickets accepts documented rubric format."""
+        mock_client = mock_client_factory(sample_epic_response)
+
+        # Format exactly as documented in tool annotation
+        rubric_json = json.dumps({
+            "small": {"duration": "4h", "scope": "tiny", "risk": "none"},
+            "medium": {"duration": "2d", "scope": "small", "risk": "low"},
+            "large": {"duration": "5d", "scope": "big", "risk": "high"},
+        })
+
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            # Should NOT raise "Invalid sizing_rubric" error
+            result = decompose_to_tickets(
+                json.dumps(sample_input_requirements), sizing_rubric=rubric_json
+            )
+
+        assert "epics" in result
+
+    def test_sizing_rubric_array_raises_error(self, sample_input_requirements):
+        """Verify non-object sizing_rubric raises error, not TypeError."""
+        from arcade_core.errors import FatalToolError
+
+        # JSON array instead of object
+        rubric_json = '["small", "medium", "large"]'
+
+        # arcade_tdk wraps ValueError in FatalToolError
+        with pytest.raises(FatalToolError, match="must be a JSON object"):
+            decompose_to_tickets(
+                json.dumps(sample_input_requirements), sizing_rubric=rubric_json
+            )
+
+    def test_sizing_rubric_string_raises_error(self, sample_input_requirements):
+        """Verify string sizing_rubric raises error, not TypeError."""
+        from arcade_core.errors import FatalToolError
+
+        # JSON string instead of object
+        rubric_json = '"just a string"'
+
+        with pytest.raises(FatalToolError, match="must be a JSON object"):
+            decompose_to_tickets(
+                json.dumps(sample_input_requirements), sizing_rubric=rubric_json
+            )
+
+    def test_sizing_rubric_number_raises_error(self, sample_input_requirements):
+        """Verify numeric sizing_rubric raises error, not TypeError."""
+        from arcade_core.errors import FatalToolError
+
+        # JSON number instead of object
+        rubric_json = "123"
+
+        with pytest.raises(FatalToolError, match="must be a JSON object"):
+            decompose_to_tickets(
+                json.dumps(sample_input_requirements), sizing_rubric=rubric_json
+            )

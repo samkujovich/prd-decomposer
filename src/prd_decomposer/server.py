@@ -17,15 +17,35 @@ from arcade_mcp_server import MCPApp
 from openai import APIConnectionError, APIError, APITimeoutError, OpenAI, RateLimitError
 from pydantic import ValidationError
 
+from prd_decomposer.circuit_breaker import CircuitBreaker, RateLimiter
 from prd_decomposer.config import Settings, get_settings
-from prd_decomposer.log import correlation_id
-from prd_decomposer.models import StructuredRequirements, TicketCollection
+from prd_decomposer.export import export_tickets as _export_tickets_impl
+from prd_decomposer.log import correlation_id, setup_logging
+from prd_decomposer.models import SizingRubric, StructuredRequirements, TicketCollection
 from prd_decomposer.prompts import (
     ANALYZE_PRD_PROMPT,
     DECOMPOSE_TO_TICKETS_PROMPT,
+    DEFAULT_SIZING_RUBRIC,
     PROMPT_VERSION,
 )
 
+# Lazy logging initialization to avoid freezing env config at import time
+_logging_initialized = False
+_logging_lock = threading.Lock()
+
+
+def _ensure_logging_initialized() -> None:
+    """Initialize logging lazily on first use."""
+    global _logging_initialized
+    if _logging_initialized:
+        return
+    with _logging_lock:
+        if not _logging_initialized:
+            setup_logging(get_settings())
+            _logging_initialized = True
+
+
+# Get logger (lazy init happens on first log call via ensure function)
 logger = logging.getLogger("prd_decomposer")
 
 app = MCPApp(name="prd_decomposer", version="1.0.0")
@@ -55,15 +75,12 @@ def _shutdown_handler(signum: int, frame: object) -> None:
 
 def _cleanup() -> None:
     """Cleanup resources on exit."""
-    try:
-        logger.info("Cleaning up resources...")
-    except (ValueError, OSError):
-        # Log stream may be closed during interpreter shutdown
-        pass
-    # Reset global singletons
-    global _client, _rate_limiter
+    # Reset global singletons - no logging here as stream may be closed
+    global _client, _rate_limiter, _circuit_breaker, _logging_initialized
     _client = None
     _rate_limiter = None
+    _circuit_breaker = None
+    _logging_initialized = False  # Reset so logging can be re-initialized
 
 
 # Register signal handlers and cleanup
@@ -83,52 +100,6 @@ class LLMError(Exception):
     pass
 
 
-class RateLimitExceededError(Exception):
-    """Raised when rate limit is exceeded."""
-
-    pass
-
-
-class RateLimiter:
-    """Thread-safe in-memory rate limiter using sliding window.
-
-    Tracks call timestamps and rejects calls that exceed the configured
-    rate limit within the time window.
-    """
-
-    def __init__(self, max_calls: int, window_seconds: int):
-        self.max_calls = max_calls
-        self.window_seconds = window_seconds
-        self._calls: list[float] = []
-        self._lock = threading.Lock()
-
-    def check_and_record(self) -> None:
-        """Check rate limit and record a call.
-
-        Raises:
-            RateLimitExceededError: If rate limit is exceeded.
-        """
-        now = time.time()
-
-        with self._lock:
-            # Remove calls outside the window
-            cutoff = now - self.window_seconds
-            self._calls = [t for t in self._calls if t > cutoff]
-
-            if len(self._calls) >= self.max_calls:
-                raise RateLimitExceededError(
-                    f"Rate limit exceeded: {self.max_calls} calls per {self.window_seconds}s. "
-                    f"Try again in {self._calls[0] + self.window_seconds - now:.1f}s."
-                )
-
-            self._calls.append(now)
-
-    def reset(self) -> None:
-        """Reset the rate limiter (mainly for testing)."""
-        with self._lock:
-            self._calls = []
-
-
 # Global rate limiter instance (initialized lazily)
 _rate_limiter: RateLimiter | None = None
 _rate_limiter_lock = threading.Lock()
@@ -146,6 +117,25 @@ def get_rate_limiter(settings: Settings | None = None) -> RateLimiter:
                     window_seconds=settings.rate_limit_window,
                 )
     return _rate_limiter
+
+
+# Global circuit breaker instance (initialized lazily)
+_circuit_breaker: CircuitBreaker | None = None
+_circuit_breaker_lock = threading.Lock()
+
+
+def get_circuit_breaker(settings: Settings | None = None) -> CircuitBreaker:
+    """Get or create the global CircuitBreaker instance."""
+    global _circuit_breaker
+    if _circuit_breaker is None:
+        with _circuit_breaker_lock:
+            if _circuit_breaker is None:
+                settings = settings or get_settings()
+                _circuit_breaker = CircuitBreaker(
+                    failure_threshold=settings.circuit_breaker_failure_threshold,
+                    reset_timeout=settings.circuit_breaker_reset_timeout,
+                )
+    return _circuit_breaker
 
 
 def _is_path_allowed(path: Path) -> bool:
@@ -205,116 +195,151 @@ def get_client() -> OpenAI:
     return _client
 
 
+# Retryable errors tuple for DRY exception handling
+_RETRYABLE_ERRORS = (RateLimitError, APIConnectionError, APITimeoutError)
+
+
 def _call_llm_with_retry(
     messages: list[dict],
     temperature: float,
     client: OpenAI | None = None,
     settings: Settings | None = None,
     rate_limiter: RateLimiter | None = None,
+    circuit_breaker: CircuitBreaker | None = None,
 ) -> tuple[dict, dict]:
-    """Call LLM with exponential backoff retry.
+    """Call LLM with exponential backoff retry and circuit breaker.
 
     Returns:
         Tuple of (parsed_json_response, usage_metadata)
 
+    Note: Initializes logging lazily on first call.
+
     Raises:
         LLMError: If all retries fail or response is invalid.
         RateLimitExceededError: If rate limit is exceeded.
+        CircuitBreakerOpenError: If circuit breaker is open.
     """
+    # Initialize logging lazily (avoids import-time side effects)
+    _ensure_logging_initialized()
+
     client = client or get_client()
     settings = settings or get_settings()
     rate_limiter = rate_limiter or get_rate_limiter(settings)
+    circuit_breaker = circuit_breaker or get_circuit_breaker(settings)
 
-    # Check rate limit before making call
-    rate_limiter.check_and_record()
+    # Check circuit breaker and get observed state atomically
+    observed_state = circuit_breaker.allow_request()
+    is_half_open_probe = observed_state == "half_open"
 
-    last_error: Exception | None = None
+    # Track whether we've properly closed the circuit breaker state
+    cb_resolved = False
+    # Track whether we actually attempted an LLM call (vs failing on rate limit)
+    llm_call_attempted = False
+    # Track whether error is client-side (4xx) vs upstream failure
+    is_client_error = False
 
-    for attempt in range(settings.max_retries):
-        # Check for shutdown before attempting LLM call
-        if is_shutting_down():
-            raise LLMError("Server is shutting down, aborting LLM call")
+    try:
+        # Check rate limit before making call
+        rate_limiter.check_and_record()
 
-        try:
-            response = client.chat.completions.create(  # type: ignore[call-overload]
-                model=settings.openai_model,
-                messages=messages,
-                response_format={"type": "json_object"},
-                temperature=temperature,
-                timeout=settings.llm_timeout,
-            )
+        last_error: Exception | None = None
 
-            # Extract content
-            content = response.choices[0].message.content
-            if not content:
-                raise LLMError("LLM returned empty response")
+        # In half-open state, limit to 1 attempt (no retries) to minimize load
+        max_attempts = 1 if is_half_open_probe else settings.max_retries
 
-            # Parse JSON
+        for attempt in range(max_attempts):
+            # Check for shutdown BEFORE marking call as attempted
+            # (shutdown aborts should not trip circuit breaker)
+            if is_shutting_down():
+                raise LLMError("Server is shutting down, aborting LLM call")
+
+            llm_call_attempted = True  # Mark that we're attempting an LLM call
+
             try:
-                data = json.loads(content)
-            except json.JSONDecodeError as e:
-                raise LLMError(f"LLM returned invalid JSON: {e}")
-
-            # Extract usage for cost tracking
-            usage = {}
-            if response.usage:
-                usage = {
-                    "prompt_tokens": response.usage.prompt_tokens,
-                    "completion_tokens": response.usage.completion_tokens,
-                    "total_tokens": response.usage.total_tokens,
-                }
-
-            return data, usage
-
-        except RateLimitError as e:
-            last_error = e
-            if attempt < settings.max_retries - 1:
-                base_delay = settings.initial_retry_delay * (2**attempt)
-                delay = base_delay * (0.5 + random.random())  # Jitter: 0.5x to 1.5x
-                logger.warning(
-                    "Retrying LLM call (attempt %d/%d) after RateLimitError, delay=%.1fs",
-                    attempt + 1, settings.max_retries, delay,
+                response = client.chat.completions.create(  # type: ignore[call-overload]
+                    model=settings.openai_model,
+                    messages=messages,
+                    response_format={"type": "json_object"},
+                    temperature=temperature,
+                    timeout=settings.llm_timeout,
                 )
-                time.sleep(delay)
 
-        except APIConnectionError as e:
-            last_error = e
-            if attempt < settings.max_retries - 1:
-                base_delay = settings.initial_retry_delay * (2**attempt)
-                delay = base_delay * (0.5 + random.random())  # Jitter: 0.5x to 1.5x
-                logger.warning(
-                    "Retrying LLM call (attempt %d/%d) after APIConnectionError, delay=%.1fs",
-                    attempt + 1, settings.max_retries, delay,
-                )
-                time.sleep(delay)
+                # Extract content
+                content = response.choices[0].message.content
+                if not content:
+                    raise LLMError("LLM returned empty response")
 
-        except APITimeoutError as e:
-            last_error = e
-            if attempt < settings.max_retries - 1:
-                base_delay = settings.initial_retry_delay * (2**attempt)
-                delay = base_delay * (0.5 + random.random())  # Jitter: 0.5x to 1.5x
-                logger.warning(
-                    "Retrying LLM call (attempt %d/%d) after APITimeoutError, delay=%.1fs",
-                    attempt + 1, settings.max_retries, delay,
-                )
-                time.sleep(delay)
+                # Parse JSON
+                try:
+                    data = json.loads(content)
+                except json.JSONDecodeError as e:
+                    raise LLMError(f"LLM returned invalid JSON: {e}")
 
-        except APIError as e:
-            # Don't retry on 4xx errors (bad request, auth, etc.)
-            status_code = getattr(e, "status_code", None)
-            if status_code and 400 <= status_code < 500:
-                raise LLMError(f"OpenAI API error: {e}")
-            last_error = e
-            if attempt < settings.max_retries - 1:
-                base_delay = settings.initial_retry_delay * (2**attempt)
-                delay = base_delay * (0.5 + random.random())  # Jitter: 0.5x to 1.5x
-                logger.warning(
-                    "Retrying LLM call (attempt %d/%d) after APIError, delay=%.1fs",
-                    attempt + 1, settings.max_retries, delay,
-                )
-                time.sleep(delay)
+                # Extract usage for cost tracking
+                usage = {}
+                if response.usage:
+                    usage = {
+                        "prompt_tokens": response.usage.prompt_tokens,
+                        "completion_tokens": response.usage.completion_tokens,
+                        "total_tokens": response.usage.total_tokens,
+                    }
 
-    raise LLMError(f"LLM call failed after {settings.max_retries} retries: {last_error}")
+                # Record success with circuit breaker
+                circuit_breaker.record_success()
+                cb_resolved = True
+
+                return data, usage
+
+            except _RETRYABLE_ERRORS as e:
+                last_error = e
+                if attempt < max_attempts - 1:
+                    base_delay = settings.initial_retry_delay * (2**attempt)
+                    delay = base_delay * (0.5 + random.random())  # Jitter: 0.5x to 1.5x
+                    logger.warning(
+                        "Retrying LLM call (attempt %d/%d) after %s, delay=%.1fs",
+                        attempt + 1, max_attempts, type(e).__name__, delay,
+                    )
+                    time.sleep(delay)
+
+            except APIError as e:
+                # Check for 4xx client errors (don't retry, don't count as failure)
+                status_code = getattr(e, "status_code", None)
+                if status_code and 400 <= status_code < 500:
+                    is_client_error = True
+                    raise LLMError(f"OpenAI API error: {e}")
+
+                # 5xx or unknown - treat as retryable
+                last_error = e
+                if attempt < max_attempts - 1:
+                    base_delay = settings.initial_retry_delay * (2**attempt)
+                    delay = base_delay * (0.5 + random.random())
+                    logger.warning(
+                        "Retrying LLM call (attempt %d/%d) after APIError, delay=%.1fs",
+                        attempt + 1, max_attempts, delay,
+                    )
+                    time.sleep(delay)
+
+        # Record failure with circuit breaker (after all retries exhausted)
+        circuit_breaker.record_failure()
+        cb_resolved = True
+
+        raise LLMError(f"LLM call failed after {max_attempts} attempts: {last_error}")
+
+    finally:
+        # Handle circuit breaker state if we exit without resolving
+        if not cb_resolved:
+            if llm_call_attempted and not is_client_error:
+                # LLM call failed (transient upstream error) - count as failure
+                # This ensures half-open probes that fail trigger reopening
+                circuit_breaker.record_failure()
+            elif is_client_error:
+                # 4xx error: upstream IS responsive (just rejected our request)
+                # In half-open: close the circuit since service is available
+                # In closed: reset failure count so 5xx/4xx/5xx isn't 3 consecutive failures
+                circuit_breaker.record_success()
+            else:
+                # Failed before LLM call (rate limit) - just release slot
+                circuit_breaker.release_half_open_slot()
 
 
 def _analyze_prd_impl(
@@ -332,71 +357,69 @@ def _analyze_prd_impl(
     client = client or get_client()
     settings = settings or get_settings()
 
-    # Validate empty/whitespace-only input
+    # Validate input is not empty
     if not prd_text or not prd_text.strip():
-        raise ValueError("PRD text cannot be empty.")
+        raise ValueError("PRD text cannot be empty or whitespace only")
 
     # Set correlation ID for this request
     request_id = str(uuid.uuid4())[:8]
     correlation_id.set(request_id)
 
     logger.info("Starting PRD analysis, prd_length=%d", len(prd_text))
+    start_time = time.monotonic()
 
-    # Validate input length (prompt injection mitigation)
+    # Validate input length (security: prevent resource exhaustion)
     if len(prd_text) > settings.max_prd_length:
         raise ValueError(
-            f"PRD text exceeds maximum length of {settings.max_prd_length} characters "
-            f"(got {len(prd_text)}). Set PRD_MAX_PRD_LENGTH to increase limit."
+            f"PRD text too long: {len(prd_text)} chars exceeds limit of {settings.max_prd_length}. "
+            "Consider splitting into smaller documents."
         )
 
     # Generate source hash for traceability
-    source_hash = hashlib.sha256(prd_text.encode()).hexdigest()[:8]
+    source_hash = hashlib.sha256(prd_text.encode()).hexdigest()[:16]
 
-    # Call LLM with retry
-    start_time = time.monotonic()
+    # Single user message with prompt and PRD (original design)
+    prompt_content = ANALYZE_PRD_PROMPT.format(prd_text=prd_text)
+    messages = [{"role": "user", "content": prompt_content}]
+
     try:
         data, usage = _call_llm_with_retry(
-            messages=[{"role": "user", "content": ANALYZE_PRD_PROMPT.format(prd_text=prd_text)}],
-            temperature=settings.analyze_temperature,
-            client=client,
-            settings=settings,
+            messages=messages, temperature=settings.analyze_temperature, client=client, settings=settings
         )
-    except LLMError as e:
-        elapsed = time.monotonic() - start_time
-        logger.error("PRD analysis failed after %.2fs: %s", elapsed, e)
-        raise RuntimeError(f"Failed to analyze PRD: {e}")
+    except LLMError:
+        logger.error("PRD analysis failed")
+        raise
 
-    elapsed = time.monotonic() - start_time
-
-    # Ensure source_hash is set
-    data["source_hash"] = source_hash
-
-    # Validate with Pydantic
+    # Validate response against Pydantic model
     try:
         validated = StructuredRequirements(**data)
     except ValidationError as e:
-        raise RuntimeError(f"LLM returned invalid structure: {e}")
+        logger.error("PRD analysis failed: invalid LLM response")
+        raise LLMError(f"LLM returned invalid structure: {e}")
 
+    elapsed = time.monotonic() - start_time
+    logger.info(
+        "PRD analysis complete, requirements=%d, elapsed=%.2fs, tokens=%s",
+        len(validated.requirements), elapsed, usage.get("total_tokens", "N/A"),
+    )
+
+    # Add metadata and override source_hash with computed value
     result = validated.model_dump()
-
-    # Add metadata for observability
+    result["source_hash"] = source_hash[:8]  # Use computed hash, truncated to 8 chars
     result["_metadata"] = {
+        "analyzed_at": datetime.now(UTC).isoformat(),
         "prompt_version": PROMPT_VERSION,
         "model": settings.openai_model,
-        "usage": usage,
-        "analyzed_at": datetime.now(UTC).isoformat(),
+        **usage,
     }
-
-    logger.info(
-        "PRD analysis complete, requirement_count=%d, elapsed=%.2fs, tokens=%s",
-        len(result["requirements"]), elapsed, usage.get("total_tokens", "N/A"),
-    )
 
     return result
 
 
 @app.tool
-def analyze_prd(prd_text: Annotated[str, "Raw PRD markdown text to analyze"]) -> dict:
+def analyze_prd(
+    prd_text: Annotated[str, "Raw PRD markdown/text content to analyze"],
+) -> dict:
     """Analyze a PRD and extract structured requirements.
 
     Extracts requirements with IDs, acceptance criteria, dependencies,
@@ -411,6 +434,7 @@ def _decompose_to_tickets_impl(
     requirements: dict | str,
     client: OpenAI | None = None,
     settings: Settings | None = None,
+    sizing_rubric: str | SizingRubric | None = None,
 ) -> dict:
     """Internal implementation of decompose_to_tickets with DI support.
 
@@ -418,10 +442,24 @@ def _decompose_to_tickets_impl(
     Produces epics with child stories, acceptance criteria, t-shirt sizing (S/M/L),
     and labels.
 
+    Args:
+        requirements: Structured requirements JSON from analyze_prd
+        client: OpenAI client (optional, for DI)
+        settings: Settings instance (optional, for DI)
+        sizing_rubric: Custom sizing rubric - can be a SizingRubric model or pre-formatted string
+
     Returns ticket collection with metadata including token usage.
     """
     client = client or get_client()
     settings = settings or get_settings()
+
+    # Resolve sizing rubric
+    if sizing_rubric is None:
+        rubric_text = DEFAULT_SIZING_RUBRIC
+    elif isinstance(sizing_rubric, SizingRubric):
+        rubric_text = sizing_rubric.to_prompt_text()
+    else:
+        rubric_text = sizing_rubric
 
     # Set correlation ID for this request
     request_id = str(uuid.uuid4())[:8]
@@ -429,8 +467,8 @@ def _decompose_to_tickets_impl(
 
     logger.info("Starting ticket decomposition")
 
-    # Check for None or empty input first
-    if requirements is None or requirements == "":
+    # Check for None, empty string, or empty dict
+    if requirements is None or requirements == "" or requirements == {}:
         raise ValueError(
             "Requirements cannot be empty. Pass the JSON output from analyze_prd as a string."
         )
@@ -445,71 +483,65 @@ def _decompose_to_tickets_impl(
             raise ValueError("Requirements JSON must be an object, not an array or primitive")
         requirements = parsed
 
-    if not requirements:
-        raise ValueError("Requirements cannot be empty. Run analyze_prd first.")
-
-    # Strip internal metadata before validation
-    requirements_clean = {k: v for k, v in requirements.items() if not k.startswith("_")}
-
-    # Validate input
-    try:
-        validated_input = StructuredRequirements(**requirements_clean)
-    except ValidationError as e:
-        raise ValueError(f"Invalid requirements structure: {e}")
-
-    # Call LLM with retry
-    start_time = time.monotonic()
-    try:
-        data, usage = _call_llm_with_retry(
-            messages=[
-                {
-                    "role": "user",
-                    "content": DECOMPOSE_TO_TICKETS_PROMPT.format(
-                        requirements_json=validated_input.model_dump_json(indent=2)
-                    ),
-                }
-            ],
-            temperature=settings.decompose_temperature,
-            client=client,
-            settings=settings,
+    # Validate input length (security: prevent resource exhaustion)
+    requirements_json = json.dumps(requirements)
+    if len(requirements_json) > settings.max_prd_length:
+        raise ValueError(
+            f"Requirements too long: {len(requirements_json)} chars exceeds limit of {settings.max_prd_length}. "
+            "Consider processing in smaller batches."
         )
-    except LLMError as e:
-        elapsed = time.monotonic() - start_time
-        logger.error("Ticket decomposition failed after %.2fs: %s", elapsed, e)
-        raise RuntimeError(f"Failed to decompose requirements: {e}")
 
-    elapsed = time.monotonic() - start_time
+    start_time = time.monotonic()
 
-    # Add metadata if not present
-    if "metadata" not in data:
-        data["metadata"] = {}
-    data["metadata"]["generated_at"] = datetime.now(UTC).isoformat()
-    data["metadata"]["model"] = settings.openai_model
-    data["metadata"]["prompt_version"] = PROMPT_VERSION
-    data["metadata"]["requirement_count"] = len(validated_input.requirements)
-    data["metadata"]["usage"] = usage
+    # Single user message with prompt and requirements (consistent with analyze_prd)
+    prompt_content = DECOMPOSE_TO_TICKETS_PROMPT.format(
+        sizing_rubric=rubric_text, requirements_json=requirements_json
+    )
+    messages = [{"role": "user", "content": prompt_content}]
 
-    # Count stories
-    story_count = sum(len(epic.get("stories", [])) for epic in data.get("epics", []))
-    data["metadata"]["story_count"] = story_count
+    data, usage = _call_llm_with_retry(
+        messages=messages, temperature=settings.decompose_temperature, client=client, settings=settings
+    )
 
-    # Validate with Pydantic
+    # Validate response against Pydantic model
     try:
         validated = TicketCollection(**data)
     except ValidationError as e:
-        raise RuntimeError(f"LLM returned invalid ticket structure: {e}")
+        raise LLMError(f"LLM returned invalid structure: {e}")
+
+    elapsed = time.monotonic() - start_time
+    story_count = sum(len(epic.stories) for epic in validated.epics)
 
     logger.info(
         "Ticket decomposition complete, epic_count=%d, story_count=%d, elapsed=%.2fs, tokens=%s",
-        len(data.get("epics", [])), story_count, elapsed, usage.get("total_tokens", "N/A"),
+        len(validated.epics), story_count, elapsed, usage.get("total_tokens", "N/A"),
     )
 
-    return validated.model_dump()
+    # Count requirements from input
+    requirement_count = len(requirements.get("requirements", []))
+
+    # Add metadata to result
+    result = validated.model_dump()
+    result["metadata"] = {
+        "generated_at": datetime.now(UTC).isoformat(),
+        "prompt_version": PROMPT_VERSION,
+        "model": settings.openai_model,
+        "requirement_count": requirement_count,
+        "story_count": story_count,
+        "usage": usage,
+    }
+
+    return result
 
 
 @app.tool
 def decompose_to_tickets(
     requirements_json: Annotated[str, "JSON string of the structured requirements from analyze_prd"],
+    sizing_rubric: Annotated[
+        str | None,
+        "Optional custom sizing rubric JSON. Format: "
+        '{"small": {"duration": "...", "scope": "...", "risk": "..."}, "medium": {...}, "large": {...}}'
+    ] = None,
 ) -> dict:
     """Convert structured requirements into Jira-compatible epics and stories.
 
@@ -517,72 +549,105 @@ def decompose_to_tickets(
     and labels. Output is ready for Jira import.
 
     Pass the complete JSON output from analyze_prd as a string.
+
+    Optionally provide a custom sizing_rubric to customize how stories are sized.
+    If not provided, uses the default rubric:
+    - S: Less than 1 day, single component, low risk
+    - M: 1-3 days, may touch multiple components, moderate complexity
+    - L: 3-5 days, significant complexity, unknowns or cross-team coordination
     """
-    return _decompose_to_tickets_impl(requirements_json)
+    # Parse custom rubric if provided
+    rubric = None
+    if sizing_rubric:
+        try:
+            rubric_data = json.loads(sizing_rubric)
+            if not isinstance(rubric_data, dict):
+                raise ValueError(
+                    f"sizing_rubric must be a JSON object, got {type(rubric_data).__name__}"
+                )
+            rubric = SizingRubric(**rubric_data)
+        except (json.JSONDecodeError, ValidationError) as e:
+            raise ValueError(f"Invalid sizing_rubric: {e}")
+
+    return _decompose_to_tickets_impl(requirements_json, sizing_rubric=rubric)
+
+
+@app.tool
+def export_tickets(
+    tickets_json: Annotated[str, "JSON string of ticket collection from decompose_to_tickets"],
+    output_format: Annotated[str, "Export format: 'csv', 'jira', or 'yaml'"] = "csv",
+    project_key: Annotated[str, "Jira project key for issue creation"] = "PROJECT",
+) -> str:
+    """Export tickets to different formats for integration with external tools.
+
+    Supported formats:
+    - csv: Flat CSV with one row per story (for spreadsheet import)
+    - jira: Jira REST API bulk create payload (ready for POST to /rest/api/3/issue/bulk)
+    - yaml: YAML format (for GitOps workflows)
+
+    Returns the exported content as a string.
+    """
+    return _export_tickets_impl(tickets_json, output_format=output_format, project_key=project_key)
 
 
 @app.tool
 def health_check() -> dict:
-    """Check service health and OpenAI API connectivity.
+    """Check service health and dependencies.
 
     Returns status information including:
     - Service status (healthy/degraded/unhealthy)
-    - OpenAI API connectivity
-    - Configuration summary
+    - OpenAI API connectivity (via simple request)
+    - Circuit breaker state
     - Rate limiter status
-
-    Use this to verify the service is operational before processing PRDs.
+    - Configuration summary
     """
+    _ensure_logging_initialized()
+
     settings = get_settings()
-    status = "healthy"
-    checks: dict[str, dict] = {}
+    circuit_breaker = get_circuit_breaker(settings)
+    rate_limiter = get_rate_limiter(settings)
 
-    # Check OpenAI API connectivity
-    try:
-        client = get_client()
-        # Make a minimal API call to verify connectivity
-        response = client.models.list()
-        checks["openai_api"] = {
-            "status": "connected",
-            "models_available": len(response.data) if response.data else 0,
-        }
-    except Exception as e:
-        status = "unhealthy"
-        checks["openai_api"] = {
-            "status": "error",
-            "error": str(e),
-        }
+    # Check circuit breaker state
+    cb_state = circuit_breaker.state
 
-    # Check rate limiter status
-    try:
-        rate_limiter = get_rate_limiter(settings)
-        with rate_limiter._lock:
-            current_calls = len(rate_limiter._calls)
-        checks["rate_limiter"] = {
-            "status": "ok",
-            "current_calls": current_calls,
-            "max_calls": rate_limiter.max_calls,
-            "window_seconds": rate_limiter.window_seconds,
-        }
-    except Exception as e:
-        status = "degraded" if status == "healthy" else status
-        checks["rate_limiter"] = {
-            "status": "error",
-            "error": str(e),
-        }
+    # Determine overall status
+    if cb_state == "open":
+        status = "degraded"
+        status_message = "Circuit breaker open - upstream failures detected"
+    elif cb_state == "half_open":
+        status = "degraded"
+        status_message = "Circuit breaker half-open - testing recovery"
+    else:
+        status = "healthy"
+        status_message = "All systems operational"
 
     return {
         "status": status,
-        "checks": checks,
+        "message": status_message,
+        "circuit_breaker": {
+            "state": cb_state,
+            "failure_threshold": circuit_breaker.failure_threshold,
+            "reset_timeout": circuit_breaker.reset_timeout,
+        },
+        "rate_limiter": {
+            "max_calls": rate_limiter.max_calls,
+            "window_seconds": rate_limiter.window_seconds,
+        },
         "config": {
-            "model": settings.openai_model,
+            "openai_model": settings.openai_model,
+            "analyze_temperature": settings.analyze_temperature,
+            "decompose_temperature": settings.decompose_temperature,
             "max_retries": settings.max_retries,
             "llm_timeout": settings.llm_timeout,
             "max_prd_length": settings.max_prd_length,
+            "circuit_breaker_failure_threshold": settings.circuit_breaker_failure_threshold,
+            "circuit_breaker_reset_timeout": settings.circuit_breaker_reset_timeout,
         },
         "version": PROMPT_VERSION,
     }
 
 
 if __name__ == "__main__":
+    # Initialize logging when running as CLI
+    _ensure_logging_initialized()
     app.run()

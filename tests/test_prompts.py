@@ -4,6 +4,7 @@ from prd_decomposer.models import Epic, Requirement, Story
 from prd_decomposer.prompts import (
     ANALYZE_PRD_PROMPT,
     DECOMPOSE_TO_TICKETS_PROMPT,
+    DEFAULT_SIZING_RUBRIC,
     PROMPT_VERSION,
 )
 
@@ -38,23 +39,39 @@ def test_decompose_to_tickets_prompt_has_placeholder():
     assert "{requirements_json}" in DECOMPOSE_TO_TICKETS_PROMPT
 
 
+def test_decompose_to_tickets_prompt_has_sizing_rubric_placeholder():
+    """Verify DECOMPOSE_TO_TICKETS_PROMPT contains the sizing_rubric placeholder."""
+    assert "{sizing_rubric}" in DECOMPOSE_TO_TICKETS_PROMPT
+
+
+def test_default_sizing_rubric_has_all_sizes():
+    """Verify DEFAULT_SIZING_RUBRIC defines S, M, and L."""
+    assert "S (Small)" in DEFAULT_SIZING_RUBRIC or "- S:" in DEFAULT_SIZING_RUBRIC
+    assert "M (Medium)" in DEFAULT_SIZING_RUBRIC or "- M:" in DEFAULT_SIZING_RUBRIC
+    assert "L (Large)" in DEFAULT_SIZING_RUBRIC or "- L:" in DEFAULT_SIZING_RUBRIC
+
+
 def test_prompts_are_formattable():
     """Verify prompts can be formatted with expected variables."""
     formatted_analyze = ANALYZE_PRD_PROMPT.format(prd_text="Test PRD content")
     assert "Test PRD content" in formatted_analyze
 
     formatted_decompose = DECOMPOSE_TO_TICKETS_PROMPT.format(
-        requirements_json='{"requirements": []}'
+        requirements_json='{"requirements": []}',
+        sizing_rubric=DEFAULT_SIZING_RUBRIC,
     )
     assert '{"requirements": []}' in formatted_decompose
+    assert "S (Small)" in formatted_decompose
 
 
 def test_analyze_prd_prompt_has_example():
     """Verify ANALYZE_PRD_PROMPT contains a few-shot example."""
     assert "## Example" in ANALYZE_PRD_PROMPT
     assert "ambiguity_flags" in ANALYZE_PRD_PROMPT
-    # Example should demonstrate ambiguity detection
-    assert "Vague quantifier" in ANALYZE_PRD_PROMPT
+    # Example should demonstrate structured ambiguity detection
+    assert "vague_quantifier" in ANALYZE_PRD_PROMPT
+    assert "severity" in ANALYZE_PRD_PROMPT
+    assert "suggested_action" in ANALYZE_PRD_PROMPT
 
 
 def test_decompose_to_tickets_prompt_has_example():

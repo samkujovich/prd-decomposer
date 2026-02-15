@@ -1,7 +1,12 @@
 """Prompt templates for PRD analysis and decomposition."""
 
 # Version for traceability - increment when prompts change
-PROMPT_VERSION = "1.3.0"
+PROMPT_VERSION = "1.5.0"
+
+# Default sizing rubric text (used when no custom rubric provided)
+DEFAULT_SIZING_RUBRIC = """   - S (Small): Less than 1 day, Single component, Low risk
+   - M (Medium): 1-3 days, May touch multiple components, Moderate complexity
+   - L (Large): 3-5 days, Significant complexity, Unknowns or cross-team coordination"""
 
 ANALYZE_PRD_PROMPT = """You are a senior technical product manager. Analyze the following PRD and extract structured requirements.
 
@@ -10,9 +15,10 @@ For each requirement you identify:
 2. Write a clear title and description
 3. Extract or infer acceptance criteria (testable conditions for success)
 4. Identify dependencies on other requirements (by ID)
-5. Flag ambiguities - add to ambiguity_flags if:
-   - Missing acceptance criteria (no clear way to test success)
-   - Vague quantifiers without metrics (e.g., "fast", "scalable", "user-friendly", "easy to use")
+5. Flag ambiguities with STRUCTURED, ACTIONABLE feedback:
+   - Categories: missing_acceptance_criteria, vague_quantifier, undefined_term, missing_details, conflicting_requirements, out_of_scope, security_concern, other
+   - Severity: critical (blocks implementation), warning (should address before sprint), suggestion (nice to clarify)
+   - Always provide a specific suggested_action the PRD author can take
 6. Assign priority: "high", "medium", or "low" based on language cues and business impact
 
 ## Example
@@ -37,8 +43,18 @@ The reset flow should be fast and user-friendly.
       ],
       "dependencies": [],
       "ambiguity_flags": [
-        "Vague quantifier: 'fast' - no specific latency requirement defined",
-        "Vague quantifier: 'user-friendly' - no measurable UX criteria specified"
+        {{
+          "category": "vague_quantifier",
+          "issue": "'fast' has no specific latency requirement defined",
+          "severity": "warning",
+          "suggested_action": "Define target latency, e.g., 'Reset email sent within 30 seconds of request'"
+        }},
+        {{
+          "category": "vague_quantifier",
+          "issue": "'user-friendly' has no measurable UX criteria specified",
+          "severity": "suggestion",
+          "suggested_action": "Add testable UX criteria, e.g., 'Password reset completes in under 3 clicks'"
+        }}
       ],
       "priority": "high"
     }}
@@ -63,7 +79,14 @@ Return valid JSON matching this exact schema:
       "description": "string",
       "acceptance_criteria": ["string"],
       "dependencies": ["REQ-XXX"],
-      "ambiguity_flags": ["string describing the ambiguity"],
+      "ambiguity_flags": [
+        {{
+          "category": "missing_acceptance_criteria|vague_quantifier|undefined_term|missing_details|conflicting_requirements|out_of_scope|security_concern|other",
+          "issue": "Description of the ambiguity",
+          "severity": "critical|warning|suggestion",
+          "suggested_action": "Specific action the PRD author should take to resolve this"
+        }}
+      ],
       "priority": "high|medium|low"
     }}
   ],
@@ -78,9 +101,7 @@ Guidelines:
 1. Group related requirements into epics (1-4 epics typically)
 2. Break each requirement into implementable stories (1-3 stories per requirement)
 3. Size stories using this rubric:
-   - S (Small): Less than 1 day, single component, low risk
-   - M (Medium): 1-3 days, may touch multiple components, moderate complexity
-   - L (Large): 3-5 days, significant complexity, unknowns, or cross-team coordination
+{sizing_rubric}
 4. Set story priority based on source requirement priority ("high", "medium", "low")
 5. Generate descriptive labels (e.g., "backend", "frontend", "api", "database", "auth", "testing")
 6. Preserve traceability by including requirement_ids on each story

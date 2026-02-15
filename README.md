@@ -41,13 +41,34 @@ Analyzes raw PRD text and extracts structured requirements.
 
 Converts structured requirements into Jira-compatible tickets.
 
-**Input:** Structured requirements from `analyze_prd` (required)
+**Input:** Structured requirements from `analyze_prd` (required), optional custom sizing rubric
 **Output:** Epics and stories with:
 - Clear titles and descriptions
 - Acceptance criteria
-- T-shirt sizing (S/M/L)
+- T-shirt sizing (S/M/L) with configurable rubric
 - Labels
 - Traceability back to requirements
+
+### `export_tickets`
+
+Exports ticket collections to different formats for integration with external tools.
+
+**Input:** Ticket collection JSON, format (`csv`, `jira`, or `yaml`)
+**Output:** Formatted string ready for import:
+- **CSV**: Flat format with one row per story (spreadsheet import)
+- **Jira**: REST API bulk create payload (ready for POST to `/rest/api/3/issue/bulk`)
+- **YAML**: Structured format for GitOps workflows
+
+### `health_check`
+
+Checks service health and OpenAI API connectivity.
+
+**Output:** Status information including:
+- Service status (healthy/degraded/unhealthy)
+- OpenAI API connectivity
+- Circuit breaker state
+- Rate limiter status
+- Configuration summary
 
 ## Features
 
@@ -61,7 +82,12 @@ Converts structured requirements into Jira-compatible tickets.
 **Note on Prompt Injection:** Like all LLM-based tools, this system is susceptible to prompt injection attacks where malicious content in PRDs could attempt to manipulate LLM behavior. Mitigations include input length limits and structural delimiters, but these are not foolproof. Do not use with untrusted input in security-sensitive contexts.
 
 ### Reliability
+- **Circuit breaker pattern** prevents cascading failures during upstream outages
+  - Opens after consecutive failures, blocks calls during recovery
+  - Half-open probes test recovery with single attempts (no retries)
+  - 4xx client errors don't trip the breaker (only transient upstream failures)
 - Automatic retry with exponential backoff for rate limits and connection errors
+- Graceful shutdown handling (SIGTERM/SIGINT)
 - Graceful error handling with clear error messages
 
 ### Observability
@@ -80,6 +106,8 @@ Environment variables with `PRD_` prefix (via pydantic-settings):
 - `PRD_MAX_PRD_LENGTH` - Maximum PRD text length in characters, 1000-500000 (default: `100000`)
 - `PRD_RATE_LIMIT_CALLS` - Maximum LLM calls per window, 1-1000 (default: `60`)
 - `PRD_RATE_LIMIT_WINDOW` - Rate limit window in seconds, 1-3600 (default: `60`)
+- `PRD_CIRCUIT_BREAKER_FAILURE_THRESHOLD` - Failures before circuit opens, 1-20 (default: `5`)
+- `PRD_CIRCUIT_BREAKER_RESET_TIMEOUT` - Seconds before half-open probe, 1-300 (default: `60`)
 
 ## Key Decisions
 
@@ -98,6 +126,12 @@ Environment variables with `PRD_` prefix (via pydantic-settings):
 | **MCP Tool Parameters** | JSON string for complex types | `dict` parameters weren't passed correctly by OpenAI agent; strings are more portable | `dict` type annotation (caused None values) |
 | **Retry Config** | Bounded validation (1-10 retries, 0-60s delay) | Prevents invalid env var values from causing runtime failures | Unbounded (accepts any value) |
 | **Path Security** | Symlink resolution + allowlist | Prevents path traversal attacks even through symlinked directories | Basic path checking (bypassable) |
+| **Circuit Breaker** | Fail-fast after consecutive failures | Prevents cascading failures during upstream outages; gives APIs time to recover | No circuit breaker (keeps hammering failed APIs) |
+| **Half-Open Probes** | Single attempt, no retries | Minimizes load during recovery; faster failure detection | Normal retry budget (adds unnecessary load) |
+| **4xx Error Handling** | Don't trip circuit breaker | Client errors indicate bad requests, not upstream failures; avoids false positives | Count all errors (opens circuit unnecessarily) |
+| **Export Formats** | CSV, Jira REST, YAML | Covers common integration needs: spreadsheets, direct API, GitOps | Single format (limits usefulness) |
+| **Input Validation** | Deep nested validation | Catches malformed payloads early with clear error paths | Shallow validation (cryptic errors in exporters) |
+| **YAML Escaping** | Quote all user content | Prevents YAML injection from special chars in titles/descriptions | Raw interpolation (broken YAML output) |
 
 ## Setup
 
@@ -164,7 +198,7 @@ uv run python src/prd_decomposer/server.py
 ### Run Tests
 
 ```bash
-# Unit tests (67 tests, 98% coverage)
+# Unit tests (243 tests)
 uv run pytest tests/ -v
 
 # With coverage report
@@ -193,20 +227,29 @@ uv run pytest tests/ --cov=prd_decomposer --cov-report=term-missing
 ```
 prd-decomposer/
 ├── src/prd_decomposer/
-│   ├── __init__.py       # Public exports
-│   ├── server.py         # MCP server + tool definitions
-│   ├── models.py         # Pydantic models
-│   ├── prompts.py        # LLM prompt templates
-│   └── config.py         # Settings via environment variables
+│   ├── __init__.py        # Public exports
+│   ├── server.py          # MCP server + tool definitions
+│   ├── models.py          # Pydantic models
+│   ├── prompts.py         # LLM prompt templates
+│   ├── config.py          # Settings via environment variables
+│   ├── log.py             # Structured JSON logging
+│   ├── circuit_breaker.py # Circuit breaker + rate limiter
+│   └── export.py          # CSV/Jira/YAML export functions
 ├── agent/
 │   └── agent.py          # OpenAI Agents SDK consumer
 ├── scripts/
 │   └── run_all_prds.py   # Batch processing script
 ├── tests/
-│   ├── test_tools.py     # Model tests
-│   ├── test_server.py    # Server/tool tests (mocked LLM)
-│   ├── test_prompts.py   # Prompt template tests
-│   └── test_config.py    # Configuration tests
+│   ├── conftest.py            # Shared fixtures
+│   ├── test_models.py         # Pydantic model tests
+│   ├── test_server.py         # Server/tool tests (mocked LLM)
+│   ├── test_circuit_breaker.py # Circuit breaker tests
+│   ├── test_export.py         # Export format tests
+│   ├── test_prompts.py        # Prompt template tests
+│   ├── test_config.py         # Configuration tests
+│   ├── test_logging.py        # Logging tests
+│   ├── test_init.py           # Package init tests
+│   └── integration/           # Real API tests (require OPENAI_API_KEY)
 ├── samples/
 │   └── sample_prd_*.md   # 10 sample PRDs
 ├── outputs/              # Generated JSON outputs (gitignored)
@@ -241,6 +284,16 @@ Run agents continuously to keep PRDs and Jira in sync:
 - **PRD → Jira**: When a PRD changes, automatically detect deltas and update/create tickets
 - **Jira → PRD**: When ticket status changes (in progress, blocked, complete), reflect it back in the PRD
 - **Real-time status dashboard**: Product and non-technical stakeholders see live implementation status tied to the high-level requirements doc—no more "what's the status of X?" meetings
+
+### Agent-Executable Tickets
+Tickets today are written for human engineers who infer context, navigate ambiguity, and fill gaps. AI agents need more structure to execute reliably. Future ticket output could include:
+- **Explicit file paths** - "Modify `src/auth/login.py`" not "update the login handler"
+- **Testable completion criteria** - Machine-verifiable assertions, not prose descriptions
+- **Dependency graph** - Which tickets must complete before this one can start
+- **Context pointers** - Links to relevant code, prior tickets, design docs the agent should read
+- **Execution hints** - Suggested approach, libraries to use, patterns to follow
+
+The goal: tickets that work for both the human reviewing the PR and the agent writing it.
 
 ## License
 

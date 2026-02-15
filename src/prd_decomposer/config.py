@@ -73,6 +73,20 @@ class Settings(BaseSettings):
         description="Rate limit window in seconds (1-3600)",
     )
 
+    # Circuit breaker settings
+    circuit_breaker_failure_threshold: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Consecutive failures before opening circuit (1-20)",
+    )
+    circuit_breaker_reset_timeout: float = Field(
+        default=60.0,
+        gt=0,
+        le=300,
+        description="Seconds before half-open state (0-300)",
+    )
+
 
 # Singleton for convenience (thread-safe with double-checked locking)
 _settings: Settings | None = None

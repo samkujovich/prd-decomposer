@@ -7,8 +7,8 @@ import pytest
 
 import prd_decomposer.config as config_module
 import prd_decomposer.server as server_module
+from prd_decomposer.circuit_breaker import CircuitBreaker, RateLimiter
 from prd_decomposer.log import correlation_id
-from prd_decomposer.server import RateLimiter
 
 
 @pytest.fixture(autouse=True)
@@ -17,6 +17,8 @@ def reset_globals():
     yield
     server_module._client = None
     server_module._rate_limiter = None
+    server_module._circuit_breaker = None
+    server_module._logging_initialized = False
     config_module._settings = None
     correlation_id.set("")
 
@@ -59,6 +61,12 @@ def make_llm_response():
 def permissive_rate_limiter():
     """Rate limiter that won't interfere with tests."""
     return RateLimiter(max_calls=9999, window_seconds=1)
+
+
+@pytest.fixture
+def permissive_circuit_breaker():
+    """Circuit breaker that won't interfere with tests."""
+    return CircuitBreaker(failure_threshold=9999, reset_timeout=1.0)
 
 
 @pytest.fixture

@@ -1,9 +1,19 @@
 """PRD Decomposer: MCP server for PRD analysis and ticket generation."""
 
+from prd_decomposer.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerOpenError,
+    RateLimiter,
+    RateLimitExceededError,
+)
 from prd_decomposer.config import Settings, get_settings
+from prd_decomposer.export import export_tickets
 from prd_decomposer.models import (
+    AmbiguityFlag,
     Epic,
     Requirement,
+    SizeDefinition,
+    SizingRubric,
     Story,
     StructuredRequirements,
     TicketCollection,
@@ -22,11 +32,19 @@ __all__ = [
     "ANALYZE_PRD_PROMPT",
     "DECOMPOSE_TO_TICKETS_PROMPT",
     "PROMPT_VERSION",
+    "AmbiguityFlag",
+    "CircuitBreaker",
+    "CircuitBreakerOpenError",
     "Epic",
+    "RateLimitExceededError",
+    "RateLimiter",
     "Requirement",
     "Settings",
+    "SizeDefinition",
+    "SizingRubric",
     "Story",
     "StructuredRequirements",
     "TicketCollection",
+    "export_tickets",
     "get_settings",
 ]
