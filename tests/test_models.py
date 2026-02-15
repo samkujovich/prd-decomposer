@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from prd_decomposer.models import (
+    AgentContext,
     AmbiguityFlag,
     Epic,
     Requirement,
@@ -397,15 +398,11 @@ class TestAgentContext:
 
     def test_agent_context_requires_goal(self):
         """AgentContext requires a goal field."""
-        from prd_decomposer.models import AgentContext
-
         with pytest.raises(ValidationError):
             AgentContext()
 
     def test_agent_context_minimal(self):
         """AgentContext with only required goal field."""
-        from prd_decomposer.models import AgentContext
-
         ctx = AgentContext(goal="Enable users to reset passwords")
         assert ctx.goal == "Enable users to reset passwords"
         assert ctx.exploration_paths == []
@@ -416,8 +413,6 @@ class TestAgentContext:
 
     def test_agent_context_full(self):
         """AgentContext with all fields populated."""
-        from prd_decomposer.models import AgentContext
-
         ctx = AgentContext(
             goal="Enable users to reset passwords",
             exploration_paths=["auth", "email"],
@@ -431,8 +426,6 @@ class TestAgentContext:
 
     def test_agent_context_json_roundtrip(self):
         """Verify AgentContext survives JSON serialization."""
-        from prd_decomposer.models import AgentContext
-
         original = AgentContext(
             goal="Enable password reset",
             exploration_paths=["auth", "email"],
@@ -457,8 +450,6 @@ class TestStory:
 
     def test_story_with_agent_context(self):
         """Story can include optional agent_context."""
-        from prd_decomposer.models import AgentContext, Story
-
         ctx = AgentContext(goal="Enable password reset")
         story = Story(
             title="Create reset endpoint",
@@ -470,7 +461,5 @@ class TestStory:
 
     def test_story_without_agent_context(self):
         """Story works without agent_context (backward compatible)."""
-        from prd_decomposer.models import Story
-
         story = Story(title="Create reset endpoint", size="M")
         assert story.agent_context is None

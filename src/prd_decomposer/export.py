@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
+from prd_decomposer.formatters import render_agent_prompt
 from prd_decomposer.models import TicketCollection
 
 logger = logging.getLogger("prd_decomposer")
@@ -70,8 +71,6 @@ def export_tickets(
 
 def _export_to_csv(tickets: TicketCollection) -> str:
     """Export tickets to CSV format."""
-    from prd_decomposer.formatters import render_agent_prompt
-
     output = io.StringIO()
     writer = csv.writer(output)
 

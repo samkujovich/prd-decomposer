@@ -25,7 +25,9 @@ class TestExportTickets:
                         {
                             "title": "Login endpoint",
                             "description": "Create POST /auth/login endpoint",
-                            "acceptance_criteria": ["Returns JWT on success", "Returns 401 on failure"],
+                            "acceptance_criteria": [
+                                "Returns JWT on success", "Returns 401 on failure"
+                            ],
                             "size": "M",
                             "priority": "high",
                             "labels": ["backend", "api"],
@@ -86,7 +88,10 @@ class TestExportTickets:
         parsed = json.loads(result)
 
         # Find a story issue (not epic)
-        story_issues = [i for i in parsed["issueUpdates"] if i["fields"]["issuetype"]["name"] == "Story"]
+        story_issues = [
+            i for i in parsed["issueUpdates"]
+            if i["fields"]["issuetype"]["name"] == "Story"
+        ]
         assert len(story_issues) == 2
 
         # High priority story should have "High" in Jira
@@ -176,7 +181,9 @@ class TestExportTickets:
                 {"title": "Epic", "description": "D", "labels": [], "stories": "not a list"}
             ]
         }
-        with pytest.raises(FatalToolError, match=r"epics\.0\.stories.*Input should be a valid list"):
+        with pytest.raises(
+            FatalToolError, match=r"epics\.0\.stories.*Input should be a valid list"
+        ):
             export_tickets(json.dumps(tickets), output_format="csv")
 
     def test_export_story_not_object_raises(self):
@@ -191,7 +198,10 @@ class TestExportTickets:
                 }
             ]
         }
-        with pytest.raises(FatalToolError, match=r"epics\.0\.stories\.0.*Input should be a valid dictionary"):
+        with pytest.raises(
+            FatalToolError,
+            match=r"epics\.0\.stories\.0.*Input should be a valid dictionary"
+        ):
             export_tickets(json.dumps(tickets), output_format="csv")
 
     def test_export_mixed_story_types_raises(self):
@@ -209,7 +219,10 @@ class TestExportTickets:
                 }
             ]
         }
-        with pytest.raises(FatalToolError, match=r"epics\.0\.stories\.1.*Input should be a valid dictionary"):
+        with pytest.raises(
+            FatalToolError,
+            match=r"epics\.0\.stories\.1.*Input should be a valid dictionary"
+        ):
             export_tickets(json.dumps(tickets), output_format="csv")
 
 
@@ -240,7 +253,8 @@ class TestNestedFieldValidation:
                             "title": "Story",
                             "description": "Desc",
                             "acceptance_criteria": ["AC1"],
-                            "labels": [123, "valid-label"],  # Integer in labels - rejected by Pydantic
+                            # Integer in labels - rejected by Pydantic
+                            "labels": [123, "valid-label"],
                             "size": "S",
                             "requirement_ids": ["REQ-001"],
                         }
@@ -338,7 +352,9 @@ class TestScalarFieldValidation:
                 }
             ]
         }
-        with pytest.raises(FatalToolError, match=r"title.*String should have at least 1 character"):
+        with pytest.raises(
+            FatalToolError, match=r"title.*String should have at least 1 character"
+        ):
             export_tickets(json.dumps(tickets), output_format="csv")
 
 

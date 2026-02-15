@@ -27,7 +27,8 @@ INITIAL_RETRY_DELAY = 1.0  # seconds
 BACKOFF_MULTIPLIER = 2.0
 
 # Agent instructions - kept as a constant for testability
-AGENT_INSTRUCTIONS = """You help engineers convert Product Requirements Documents (PRDs) into actionable Jira tickets.
+AGENT_INSTRUCTIONS = """You help engineers convert Product Requirements Documents (PRDs) into \
+actionable Jira tickets.
 
 ## Available Tools
 
@@ -343,7 +344,10 @@ async def connect_mcp_server_with_retry(
                 print(f"[DEBUG] Connection attempt {attempt} failed: {e}")
 
             if attempt < MAX_CONNECTION_RETRIES:
-                print(f"Connection failed, retrying in {delay:.1f}s... ({attempt}/{MAX_CONNECTION_RETRIES})")
+                print(
+                    f"Connection failed, retrying in {delay:.1f}s... "
+                    f"({attempt}/{MAX_CONNECTION_RETRIES})"
+                )
                 await asyncio.sleep(delay)
                 delay *= BACKOFF_MULTIPLIER
 
@@ -433,7 +437,8 @@ async def main() -> None:
         print("=" * 40)
         print("I help convert PRDs into Jira tickets.")
         print("Paste your PRD or provide a file path to get started.")
-        print("\nCommands: accept [n], dismiss [n], clarify [n] \"text\", tickets, ambiguities, prompt [n]")
+        print("\nCommands: accept [n], dismiss [n], clarify [n] \"text\", "
+              "tickets, ambiguities, prompt [n]")
         print("Type 'quit' to exit.\n")
 
         while True:
@@ -485,7 +490,10 @@ async def main() -> None:
                 current_input = [*conversation_history, {"role": "user", "content": user_input}]
 
                 if verbose:
-                    print(f"[DEBUG] Sending request with {len(conversation_history)} history items...")
+                    print(
+                        f"[DEBUG] Sending request with "
+                        f"{len(conversation_history)} history items..."
+                    )
 
                 # Run with timeout handling
                 print("Thinking...", end="", flush=True)

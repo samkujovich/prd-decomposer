@@ -628,6 +628,17 @@ class TestSessionStateTickets:
         assert session.get_story_by_index(2) is None  # Only 1 story
         assert session.get_story_by_index(99) is None
 
+    def test_reset_clears_current_tickets(self):
+        """reset() clears stored tickets."""
+        session = SessionState()
+        session.current_tickets = {
+            "epics": [{"title": "Epic 1", "stories": [{"title": "Story 1"}]}]
+        }
+        assert session.current_tickets is not None
+
+        session.reset()
+        assert session.current_tickets is None
+
 
 class TestHandlePromptCommand:
     """Tests for handle_command with prompt command."""

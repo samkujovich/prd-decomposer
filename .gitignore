@@ -20,3 +20,6 @@ build/
 .DS_Store
 .coverage
 outputs/
+
+# Local planning docs
+docs/plans/

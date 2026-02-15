@@ -135,8 +135,12 @@ class TicketCollection(BaseModel):
 class SizeDefinition(BaseModel):
     """Definition of a single t-shirt size for story estimation."""
 
-    duration: str = Field(..., min_length=1, description="Expected duration (e.g., 'Less than 1 day')")
-    scope: str = Field(..., min_length=1, description="Scope description (e.g., 'Single component')")
+    duration: str = Field(
+        ..., min_length=1, description="Expected duration (e.g., 'Less than 1 day')"
+    )
+    scope: str = Field(
+        ..., min_length=1, description="Scope description (e.g., 'Single component')"
+    )
     risk: str = Field(..., min_length=1, description="Risk level (e.g., 'Low risk')")
 
 

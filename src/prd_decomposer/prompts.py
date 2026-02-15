@@ -176,7 +176,18 @@ Guidelines:
           "size": "S",
           "priority": "high",
           "labels": ["backend", "email"],
-          "requirement_ids": ["REQ-001"]
+          "requirement_ids": ["REQ-001"],
+          "agent_context": {{
+            "goal": "Deliver a professional, branded email that guides users to reset",
+            "exploration_paths": ["email templates", "branding", "password reset"],
+            "exploration_hints": ["src/email/", "templates/"],
+            "known_patterns": ["Use existing email service"],
+            "verification_tests": ["test_reset_email_template"],
+            "self_check": [
+              "Is the reset link URL secure (HTTPS)?",
+              "Does the email pass spam filters?"
+            ]
+          }}
         }},
         {{
           "title": "Build password reset form UI",
@@ -189,7 +200,18 @@ Guidelines:
           "size": "M",
           "priority": "high",
           "labels": ["frontend", "auth"],
-          "requirement_ids": ["REQ-001"]
+          "requirement_ids": ["REQ-001"],
+          "agent_context": {{
+            "goal": "Provide a user-friendly form for password reset completion",
+            "exploration_paths": ["password form", "validation", "auth UI"],
+            "exploration_hints": ["src/components/auth/", "src/pages/"],
+            "known_patterns": ["Follow existing form patterns", "Use form validation lib"],
+            "verification_tests": ["test_reset_form", "test_password_validation"],
+            "self_check": [
+              "Does password validation match backend requirements?",
+              "Is the form accessible (a11y)?"
+            ]
+          }}
         }}
       ],
       "labels": ["auth", "security"]

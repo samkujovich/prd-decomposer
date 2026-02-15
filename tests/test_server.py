@@ -591,7 +591,9 @@ class TestAnalyzePrd:
         result = _analyze_prd_impl(prd_at_limit, client=mock_client, settings=settings)
         assert "requirements" in result
 
-    @pytest.mark.parametrize("empty_input", ["", "   ", "\n\t"], ids=["empty", "whitespace", "newlines"])
+    @pytest.mark.parametrize(
+        "empty_input", ["", "   ", "\n\t"], ids=["empty", "whitespace", "newlines"]
+    )
     def test_analyze_prd_rejects_empty_input(self, empty_input):
         """Verify analyze_prd raises ValueError for empty/whitespace input."""
         with pytest.raises(ValueError, match="cannot be empty"):
@@ -862,9 +864,15 @@ class TestDecomposeToTickets:
         from prd_decomposer.models import SizeDefinition
 
         custom_rubric = SizingRubric(
-            small=SizeDefinition(label="S", duration="Up to 4 hours", scope="Single file", risk="Minimal"),
-            medium=SizeDefinition(label="M", duration="1-2 days", scope="Few modules", risk="Low"),
-            large=SizeDefinition(label="L", duration="1 week", scope="Cross-team", risk="High"),
+            small=SizeDefinition(
+                label="S", duration="Up to 4 hours", scope="Single file", risk="Minimal"
+            ),
+            medium=SizeDefinition(
+                label="M", duration="1-2 days", scope="Few modules", risk="Low"
+            ),
+            large=SizeDefinition(
+                label="L", duration="1 week", scope="Cross-team", risk="High"
+            ),
         )
 
         _decompose_to_tickets_impl(

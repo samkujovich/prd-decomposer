@@ -80,7 +80,10 @@ def test_decompose_to_tickets_prompt_has_example():
     assert "epics" in DECOMPOSE_TO_TICKETS_PROMPT
     assert "stories" in DECOMPOSE_TO_TICKETS_PROMPT
     # Example should show sizing
-    assert '"size": "M"' in DECOMPOSE_TO_TICKETS_PROMPT or '"size": "S"' in DECOMPOSE_TO_TICKETS_PROMPT
+    assert (
+        '"size": "M"' in DECOMPOSE_TO_TICKETS_PROMPT
+        or '"size": "S"' in DECOMPOSE_TO_TICKETS_PROMPT
+    )
 
 
 def test_analyze_prd_prompt_has_xml_delimiters():
