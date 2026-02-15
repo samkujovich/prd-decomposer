@@ -21,6 +21,7 @@ from prd_decomposer.server import (
     _decompose_to_tickets_impl,
     _is_path_allowed,
     get_client,
+    get_rate_limiter,
     read_file,
 )
 
@@ -117,11 +118,6 @@ class TestGetClient:
             mock_client = MagicMock()
             mock_openai.return_value = mock_client
 
-            # Reset the global _client to test initialization
-            import prd_decomposer.server as server_module
-
-            server_module._client = None
-
             client = get_client()
             assert client is mock_client
             mock_openai.assert_called_once()
@@ -131,10 +127,6 @@ class TestGetClient:
         with patch("prd_decomposer.server.OpenAI") as mock_openai:
             mock_client = MagicMock()
             mock_openai.return_value = mock_client
-
-            import prd_decomposer.server as server_module
-
-            server_module._client = None
 
             client1 = get_client()
             client2 = get_client()
@@ -148,10 +140,6 @@ class TestGetClient:
         with patch("prd_decomposer.server.OpenAI") as mock_openai:
             mock_client = MagicMock()
             mock_openai.return_value = mock_client
-
-            import prd_decomposer.server as server_module
-
-            server_module._client = None
 
             results: list = []
             barrier = threading.Barrier(10)
@@ -453,16 +441,14 @@ class TestRateLimiter:
         """Verify rate limiter allows calls after window expires."""
         limiter = RateLimiter(max_calls=2, window_seconds=1)
 
-        # Use up the limit
-        limiter.check_and_record()
-        limiter.check_and_record()
+        base_time = 1000.0
+        with patch("prd_decomposer.server.time.time", return_value=base_time):
+            limiter.check_and_record()
+            limiter.check_and_record()
 
-        # Wait for window to expire
-        import time
-        time.sleep(1.1)
-
-        # Should allow new calls
-        limiter.check_and_record()  # Should not raise
+        # Advance time past the window
+        with patch("prd_decomposer.server.time.time", return_value=base_time + 1.1):
+            limiter.check_and_record()  # Should not raise
 
     def test_rate_limiter_reset_clears_calls(self):
         """Verify reset() clears the call history."""
@@ -1079,37 +1065,24 @@ class TestIntegrationPipeline:
         assert tickets["metadata"]["requirement_count"] == 1
 
 
-def _make_mock_client(response_data: dict) -> MagicMock:
-    """Helper to create a mock OpenAI client with a canned response."""
-    mock_usage = MagicMock(prompt_tokens=100, completion_tokens=50, total_tokens=150)
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = MagicMock(
-        choices=[MagicMock(message=MagicMock(content=json.dumps(response_data)))],
-        usage=mock_usage,
-    )
-    return mock_client
-
-
 class TestServerLogging:
     """Tests for structured logging in server tool implementations."""
 
-    def test_analyze_prd_sets_correlation_id(self, caplog):
+    def test_analyze_prd_sets_correlation_id(self, caplog, mock_client_factory):
         """Verify _analyze_prd_impl sets a correlation ID."""
         mock_response = {
             "requirements": [],
             "summary": "Test",
             "source_hash": "ignored",
         }
-        mock_client = _make_mock_client(mock_response)
+        mock_client = mock_client_factory(mock_response)
 
         with caplog.at_level(logging.DEBUG, logger="prd_decomposer"):
             _analyze_prd_impl("Test PRD", client=mock_client)
 
-        # After the call, correlation_id should have been set (non-empty)
-        # We check the log records for a non-empty correlation_id
         assert any("Starting PRD analysis" in r.message for r in caplog.records)
 
-    def test_analyze_prd_logs_completion(self, caplog):
+    def test_analyze_prd_logs_completion(self, caplog, mock_client_factory):
         """Verify _analyze_prd_impl logs completion with requirement count."""
         mock_response = {
             "requirements": [
@@ -1126,7 +1099,7 @@ class TestServerLogging:
             "summary": "Test",
             "source_hash": "ignored",
         }
-        mock_client = _make_mock_client(mock_response)
+        mock_client = mock_client_factory(mock_response)
 
         with caplog.at_level(logging.DEBUG, logger="prd_decomposer"):
             _analyze_prd_impl("Test PRD", client=mock_client)
@@ -1134,7 +1107,7 @@ class TestServerLogging:
         messages = [r.message for r in caplog.records]
         assert any("PRD analysis complete" in m for m in messages)
 
-    def test_decompose_logs_start_and_completion(self, caplog):
+    def test_decompose_logs_start_and_completion(self, caplog, mock_client_factory):
         """Verify _decompose_to_tickets_impl logs start and completion."""
         input_requirements = {
             "requirements": [
@@ -1154,7 +1127,7 @@ class TestServerLogging:
         mock_response = {
             "epics": [{"title": "Epic", "description": "Desc", "stories": [], "labels": []}]
         }
-        mock_client = _make_mock_client(mock_response)
+        mock_client = mock_client_factory(mock_response)
 
         with caplog.at_level(logging.DEBUG, logger="prd_decomposer"):
             _decompose_to_tickets_impl(input_requirements, client=mock_client)
@@ -1163,7 +1136,7 @@ class TestServerLogging:
         assert any("Starting ticket decomposition" in m for m in messages)
         assert any("Ticket decomposition complete" in m for m in messages)
 
-    def test_call_llm_with_retry_logs_retry_attempts(self, caplog):
+    def test_call_llm_with_retry_logs_retry_attempts(self, caplog, permissive_rate_limiter):
         """Verify _call_llm_with_retry logs retry attempts."""
         mock_response = {"result": "success"}
         mock_usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
@@ -1187,6 +1160,7 @@ class TestServerLogging:
                     temperature=0.2,
                     client=mock_client,
                     settings=settings,
+                    rate_limiter=permissive_rate_limiter,
                 )
 
         messages = [r.message for r in caplog.records]
@@ -1207,3 +1181,106 @@ class TestServerLogging:
 
         messages = [r.message for r in caplog.records]
         assert any("PRD analysis failed" in m for m in messages)
+
+
+class TestDecomposeToTicketsEdgeCases:
+    """Edge-case tests for decompose_to_tickets input validation."""
+
+    def test_decompose_to_tickets_none_raises(self):
+        """Verify _decompose_to_tickets_impl raises ValueError for None input."""
+        with pytest.raises(ValueError, match="cannot be empty"):
+            _decompose_to_tickets_impl(None, client=MagicMock())
+
+    def test_decompose_to_tickets_empty_string_raises(self):
+        """Verify _decompose_to_tickets_impl raises ValueError for empty string."""
+        with pytest.raises(ValueError, match="cannot be empty"):
+            _decompose_to_tickets_impl("", client=MagicMock())
+
+
+class TestCallLLMEdgeCases:
+    """Edge-case tests for _call_llm_with_retry."""
+
+    def test_call_llm_with_retry_no_usage(self, permissive_rate_limiter):
+        """Verify _call_llm_with_retry returns empty usage when response.usage is None."""
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content='{"result": "ok"}'))],
+            usage=None,
+        )
+
+        data, usage = _call_llm_with_retry(
+            [{"role": "user", "content": "test"}],
+            temperature=0.2,
+            client=mock_client,
+            rate_limiter=permissive_rate_limiter,
+        )
+
+        assert data == {"result": "ok"}
+        assert usage == {}
+
+    def test_call_llm_with_retry_exponential_backoff_delays(self, permissive_rate_limiter):
+        """Verify retry sleep delays follow exponential backoff pattern."""
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = RateLimitError(
+            message="Rate limit", response=MagicMock(status_code=429), body=None
+        )
+
+        settings = Settings(max_retries=4, initial_retry_delay=1.0)
+        with patch("prd_decomposer.server.time.sleep") as mock_sleep:
+            with pytest.raises(LLMError):
+                _call_llm_with_retry(
+                    [{"role": "user", "content": "test"}],
+                    temperature=0.2,
+                    client=mock_client,
+                    settings=settings,
+                    rate_limiter=permissive_rate_limiter,
+                )
+
+        # 4 retries = 3 sleeps (no sleep after last attempt)
+        assert mock_sleep.call_count == 3
+        delays = [call.args[0] for call in mock_sleep.call_args_list]
+        assert delays == [1.0, 2.0, 4.0]
+
+
+class TestReadFileUTF8:
+    """Tests for UTF-8 file reading."""
+
+    def test_read_file_utf8_content(self, tmp_path):
+        """Verify read_file correctly reads non-ASCII UTF-8 content."""
+        import prd_decomposer.server as server_module
+
+        original_allowed = server_module.ALLOWED_DIRECTORIES.copy()
+        server_module.ALLOWED_DIRECTORIES.append(tmp_path)
+
+        try:
+            test_file = tmp_path / "unicode.md"
+            content = "PRD: données résumé 日本語"
+            test_file.write_text(content, encoding="utf-8")
+
+            result = read_file(str(test_file))
+
+            assert result == content
+        finally:
+            server_module.ALLOWED_DIRECTORIES = original_allowed
+
+
+class TestGetRateLimiterThreadSafety:
+    """Tests for get_rate_limiter thread safety."""
+
+    def test_get_rate_limiter_thread_safe(self):
+        """Verify concurrent get_rate_limiter calls create only one instance."""
+        results: list = []
+        barrier = threading.Barrier(10)
+
+        def worker():
+            barrier.wait()
+            results.append(get_rate_limiter())
+
+        threads = [threading.Thread(target=worker) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(results) == 10
+        assert all(r is results[0] for r in results)

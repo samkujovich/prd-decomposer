@@ -185,11 +185,11 @@ def _call_llm_with_retry(
     # Check rate limit before making call
     rate_limiter.check_and_record()
 
-    last_error = None
+    last_error: Exception | None = None
 
     for attempt in range(settings.max_retries):
         try:
-            response = client.chat.completions.create(
+            response = client.chat.completions.create(  # type: ignore[call-overload]
                 model=settings.openai_model,
                 messages=messages,
                 response_format={"type": "json_object"},
@@ -353,7 +353,7 @@ def analyze_prd(prd_text: Annotated[str, "Raw PRD markdown text to analyze"]) ->
 
 
 def _decompose_to_tickets_impl(
-    requirements: dict,
+    requirements: dict | str,
     client: OpenAI | None = None,
     settings: Settings | None = None,
 ) -> dict:
@@ -383,9 +383,12 @@ def _decompose_to_tickets_impl(
     # Handle case where requirements is passed as string (expected for MCP)
     if isinstance(requirements, str):
         try:
-            requirements = json.loads(requirements)
+            parsed = json.loads(requirements)
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON in requirements: {e}")
+        if not isinstance(parsed, dict):
+            raise ValueError("Requirements JSON must be an object, not an array or primitive")
+        requirements = parsed
 
     if not requirements:
         raise ValueError("Requirements cannot be empty. Run analyze_prd first.")

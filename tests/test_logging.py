@@ -133,3 +133,11 @@ class TestSetupLogging:
         logger = setup_logging(settings)
 
         assert logger.name == "prd_decomposer"
+
+    def test_setup_logging_clears_duplicate_handlers(self):
+        """Verify calling setup_logging twice does not duplicate handlers."""
+        settings = Settings(log_format="json")
+        setup_logging(settings)
+        logger = setup_logging(settings)
+
+        assert len(logger.handlers) == 1
