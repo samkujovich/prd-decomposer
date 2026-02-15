@@ -17,6 +17,8 @@ This document tracks AI tool usage during development of prd-decomposer.
 - `src/prd_decomposer/config.py` - Settings class with environment variable support
 - `tests/test_models.py` - Pydantic model unit tests
 - `tests/test_server.py` - Server/tool tests with mocked LLM
+- `tests/test_circuit_breaker.py` - Circuit breaker tests
+- `tests/test_export.py` - Export format tests
 - `tests/test_prompts.py` - Prompt template tests
 - `tests/test_config.py` - Configuration validation tests
 - `evals/eval_prd_tools.py` - Arcade eval suite (8 eval cases)
@@ -110,6 +112,13 @@ Claude Code fixed 11 bugs identified in code review:
 - **Null Stories Handling**: Normalize `stories: null` to `[]` during export validation
 - **Testing**: Expanded from 234 to 263 tests (259 unit + 4 integration)
 
+### Session 9: Production Hardening & Test Reorganization
+Claude Code addressed final code review feedback:
+- **Production Hardening**: Moved `_logging_initialized` reset to conftest, removed misleading `__all__`, added exception chaining with `from e`, switched to `time.monotonic()` for elapsed time, reverted to single user message pattern for LLM calls
+- **Export Cleanup**: Changed `_comment` to `_metadata` in YAML export, simplified `_map_priority_to_jira` to trust Pydantic validation
+- **Test Reorganization**: Extracted circuit breaker tests to `test_circuit_breaker.py` and export tests to `test_export.py` to mirror source structure per CLAUDE.md conventions
+- **Testing**: 243 tests (239 unit + 4 integration) after reorganization
+
 ## Prompts Used
 
 Key prompts used during development:
@@ -140,7 +149,7 @@ This prompt pattern is adapted from the [Agentic Code Reviewer](https://github.c
 ## Quality Assurance
 
 - All AI-generated code was reviewed before committing
-- 263 tests (259 unit + 4 integration) with comprehensive coverage
+- 243 tests (239 unit + 4 integration) with comprehensive coverage
 - Arcade evals validate tool selection (8 eval cases)
 - Security review for path traversal and injection risks
 - Error handling review for LLM failure scenarios

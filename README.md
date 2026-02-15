@@ -198,7 +198,7 @@ uv run python src/prd_decomposer/server.py
 ### Run Tests
 
 ```bash
-# Unit tests (263 tests)
+# Unit tests (243 tests)
 uv run pytest tests/ -v
 
 # With coverage report
@@ -227,25 +227,29 @@ uv run pytest tests/ --cov=prd_decomposer --cov-report=term-missing
 ```
 prd-decomposer/
 ├── src/prd_decomposer/
-│   ├── __init__.py       # Public exports
-│   ├── server.py         # MCP server + tool definitions
-│   ├── models.py         # Pydantic models
-│   ├── prompts.py        # LLM prompt templates
-│   ├── config.py         # Settings via environment variables
-│   └── log.py            # Structured JSON logging
+│   ├── __init__.py        # Public exports
+│   ├── server.py          # MCP server + tool definitions
+│   ├── models.py          # Pydantic models
+│   ├── prompts.py         # LLM prompt templates
+│   ├── config.py          # Settings via environment variables
+│   ├── log.py             # Structured JSON logging
+│   ├── circuit_breaker.py # Circuit breaker + rate limiter
+│   └── export.py          # CSV/Jira/YAML export functions
 ├── agent/
 │   └── agent.py          # OpenAI Agents SDK consumer
 ├── scripts/
 │   └── run_all_prds.py   # Batch processing script
 ├── tests/
-│   ├── conftest.py       # Shared fixtures
-│   ├── test_models.py    # Pydantic model tests
-│   ├── test_server.py    # Server/tool tests (mocked LLM)
-│   ├── test_prompts.py   # Prompt template tests
-│   ├── test_config.py    # Configuration tests
-│   ├── test_logging.py   # Logging tests
-│   ├── test_init.py      # Package init tests
-│   └── integration/      # Real API tests (require OPENAI_API_KEY)
+│   ├── conftest.py            # Shared fixtures
+│   ├── test_models.py         # Pydantic model tests
+│   ├── test_server.py         # Server/tool tests (mocked LLM)
+│   ├── test_circuit_breaker.py # Circuit breaker tests
+│   ├── test_export.py         # Export format tests
+│   ├── test_prompts.py        # Prompt template tests
+│   ├── test_config.py         # Configuration tests
+│   ├── test_logging.py        # Logging tests
+│   ├── test_init.py           # Package init tests
+│   └── integration/           # Real API tests (require OPENAI_API_KEY)
 ├── samples/
 │   └── sample_prd_*.md   # 10 sample PRDs
 ├── outputs/              # Generated JSON outputs (gitignored)
