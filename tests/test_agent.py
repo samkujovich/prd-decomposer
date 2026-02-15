@@ -6,6 +6,7 @@ from agent.formatters import (
     format_requirements_table,
     format_ticket_summary,
     format_tickets_hierarchy,
+    render_agent_prompt,
 )
 from agent.session_state import SessionState
 
@@ -489,3 +490,67 @@ class TestFormatters:
         assert "🟢 2 Small" in result
         assert "🟡 1 Medium" in result
         assert "🔴 0 Large" in result
+
+
+class TestRenderAgentPrompt:
+    """Tests for render_agent_prompt function."""
+
+    def test_render_with_full_agent_context(self):
+        """Render story with complete agent_context."""
+        story = {
+            "title": "Create reset endpoint",
+            "description": "Implement POST /auth/reset-password",
+            "acceptance_criteria": ["Returns 200 for valid emails"],
+            "agent_context": {
+                "goal": "Enable password recovery",
+                "exploration_paths": ["auth", "email"],
+                "exploration_hints": ["src/auth/"],
+                "known_patterns": ["Use JWT tokens"],
+                "verification_tests": ["test_reset"],
+                "self_check": ["Is token secure?"],
+            },
+        }
+        result = render_agent_prompt(story)
+
+        assert "## Goal" in result
+        assert "Enable password recovery" in result
+        assert "## Task" in result
+        assert "Create reset endpoint" in result
+        assert "## Before You Start" in result
+        assert "Search for: `auth`" in result
+        assert "Start with: `src/auth/`" in result
+        assert "## Patterns & Libraries" in result
+        assert "Use JWT tokens" in result
+        assert "## Acceptance Criteria" in result
+        assert "- [ ] Returns 200 for valid emails" in result
+        assert "## Verification" in result
+        assert "`test_reset`" in result
+        assert "## Before Marking Done" in result
+        assert "Is token secure?" in result
+
+    def test_render_without_agent_context(self):
+        """Render story without agent_context falls back to basic format."""
+        story = {
+            "title": "Simple task",
+            "description": "Do the thing",
+        }
+        result = render_agent_prompt(story)
+
+        assert "## Simple task" in result
+        assert "Do the thing" in result
+        assert "## Goal" not in result
+
+    def test_render_with_minimal_agent_context(self):
+        """Render story with only goal in agent_context."""
+        story = {
+            "title": "Task",
+            "description": "Description",
+            "agent_context": {
+                "goal": "The why",
+            },
+        }
+        result = render_agent_prompt(story)
+
+        assert "## Goal" in result
+        assert "The why" in result
+        assert "## Before You Start" not in result  # No exploration paths
