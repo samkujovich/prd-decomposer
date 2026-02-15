@@ -1,7 +1,7 @@
 """Prompt templates for PRD analysis and decomposition."""
 
 # Version for traceability - increment when prompts change
-PROMPT_VERSION = "1.5.0"
+PROMPT_VERSION = "1.6.0"
 
 # Default sizing rubric text (used when no custom rubric provided)
 DEFAULT_SIZING_RUBRIC = """   - S (Small): Less than 1 day, Single component, Low risk
@@ -106,6 +106,13 @@ Guidelines:
 5. Generate descriptive labels (e.g., "backend", "frontend", "api", "database", "auth", "testing")
 6. Preserve traceability by including requirement_ids on each story
 7. Write clear acceptance criteria derived from the requirements
+8. For each story, include an agent_context object with:
+   - goal: A clear statement of WHY this work matters (the problem being solved)
+   - exploration_paths: Keywords/concepts an AI agent should search for to understand context
+   - exploration_hints: Specific file paths or modules to start with (if inferrable from requirements)
+   - known_patterns: Libraries, conventions, or existing code patterns to follow
+   - verification_tests: Test names or commands to verify completion
+   - self_check: Questions to validate edge cases, security, and correctness
 
 ## Example
 
@@ -144,7 +151,19 @@ Guidelines:
           "size": "M",
           "priority": "high",
           "labels": ["backend", "api", "auth"],
-          "requirement_ids": ["REQ-001"]
+          "requirement_ids": ["REQ-001"],
+          "agent_context": {{
+            "goal": "Allow users who forgot their password to securely regain account access without contacting support",
+            "exploration_paths": ["password reset", "authentication", "email sending", "token generation"],
+            "exploration_hints": ["src/auth/", "src/email/"],
+            "known_patterns": ["Use existing email service", "Follow JWT token pattern for reset tokens"],
+            "verification_tests": ["test_password_reset_request", "test_reset_token_expiry"],
+            "self_check": [
+              "Does this prevent email enumeration attacks?",
+              "Is the reset token cryptographically secure?",
+              "What happens if the email service is down?"
+            ]
+          }}
         }},
         {{
           "title": "Implement password reset email template",
@@ -202,7 +221,15 @@ Return valid JSON matching this exact schema:
           "size": "S|M|L",
           "priority": "high|medium|low",
           "labels": ["string"],
-          "requirement_ids": ["REQ-XXX"]
+          "requirement_ids": ["REQ-XXX"],
+          "agent_context": {{
+            "goal": "string",
+            "exploration_paths": ["string"],
+            "exploration_hints": ["string"],
+            "known_patterns": ["string"],
+            "verification_tests": ["string"],
+            "self_check": ["string"]
+          }}
         }}
       ],
       "labels": ["string"]
