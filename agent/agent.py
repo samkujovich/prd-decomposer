@@ -227,7 +227,7 @@ def _extract_balanced_braces(text: str, start: int) -> str | None:
             escape_next = True
             continue
 
-        if char == '"' and not escape_next:
+        if char == '"':
             in_string = not in_string
             continue
 

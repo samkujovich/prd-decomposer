@@ -135,6 +135,12 @@ Let me know if you need changes.'''
         result = extract_requirements_from_output(output)
         assert result is None
 
+    def test_extract_unbalanced_braces(self):
+        """Return None for unbalanced braces."""
+        output = '```json\n{"incomplete": [\n```'
+        result = extract_requirements_from_output(output)
+        assert result is None
+
 
 class TestSessionState:
     """Tests for SessionState class."""
