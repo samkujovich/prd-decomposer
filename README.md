@@ -218,7 +218,7 @@ uv run python src/prd_decomposer/server.py
 ### Run Tests
 
 ```bash
-# Unit tests (243 tests, no API key required)
+# Unit tests (305 tests, no API key required)
 uv run pytest tests/ -v
 
 # With coverage report
@@ -268,14 +268,17 @@ prd-decomposer/
 ├── src/prd_decomposer/
 │   ├── __init__.py        # Public exports
 │   ├── server.py          # MCP server + tool definitions
-│   ├── models.py          # Pydantic models
+│   ├── models.py          # Pydantic models (includes AgentContext)
 │   ├── prompts.py         # LLM prompt templates
+│   ├── formatters.py      # Prompt rendering for AI agents
 │   ├── config.py          # Settings via environment variables
 │   ├── log.py             # Structured JSON logging
 │   ├── circuit_breaker.py # Circuit breaker + rate limiter
 │   └── export.py          # CSV/Jira/YAML export functions
 ├── agent/
-│   └── agent.py          # OpenAI Agents SDK consumer
+│   ├── agent.py          # OpenAI Agents SDK consumer
+│   ├── session_state.py  # Agent session state management
+│   └── formatters.py     # Re-exports from prd_decomposer.formatters
 ├── scripts/
 │   └── run_all_prds.py   # Batch processing script
 ├── tests/
@@ -323,16 +326,6 @@ Run agents continuously to keep PRDs and Jira in sync:
 - **PRD → Jira**: When a PRD changes, automatically detect deltas and update/create tickets
 - **Jira → PRD**: When ticket status changes (in progress, blocked, complete), reflect it back in the PRD
 - **Real-time status dashboard**: Product and non-technical stakeholders see live implementation status tied to the high-level requirements doc—no more "what's the status of X?" meetings
-
-### Agent-Executable Tickets
-Tickets today are written for human engineers who infer context, navigate ambiguity, and fill gaps. AI agents need more structure to execute reliably. Future ticket output could include:
-- **Explicit file paths** - "Modify `src/auth/login.py`" not "update the login handler"
-- **Testable completion criteria** - Machine-verifiable assertions, not prose descriptions
-- **Dependency graph** - Which tickets must complete before this one can start
-- **Context pointers** - Links to relevant code, prior tickets, design docs the agent should read
-- **Execution hints** - Suggested approach, libraries to use, patterns to follow
-
-The goal: tickets that work for both the human reviewing the PR and the agent writing it.
 
 ## License
 

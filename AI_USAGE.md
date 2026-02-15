@@ -12,18 +12,22 @@ This document tracks AI tool usage during development of prd-decomposer.
 ## AI-Generated vs Human-Written
 
 ### Fully AI-Generated (with human review)
-- `src/prd_decomposer/models.py` - Pydantic model definitions
+- `src/prd_decomposer/models.py` - Pydantic model definitions (includes AgentContext)
 - `src/prd_decomposer/prompts.py` - LLM prompt templates
+- `src/prd_decomposer/formatters.py` - Prompt rendering for AI agents
 - `src/prd_decomposer/config.py` - Settings class with environment variable support
+- `agent/session_state.py` - Agent session state management
 - `tests/test_models.py` - Pydantic model unit tests
 - `tests/test_server.py` - Server/tool tests with mocked LLM
 - `tests/test_circuit_breaker.py` - Circuit breaker tests
 - `tests/test_export.py` - Export format tests
 - `tests/test_prompts.py` - Prompt template tests
 - `tests/test_config.py` - Configuration validation tests
+- `tests/test_agent.py` - Agent CLI tests
 - `evals/eval_prd_tools.py` - Arcade eval suite (8 eval cases)
 - `tests/integration/test_real_api.py` - Real API integration tests
 - `docs/diagrams/architecture.*` - Architecture diagram (Excalidraw + SVG)
+- `docs/plans/*-agent-executable-tickets-*.md` - Design and implementation plans
 - `README.md` - Documentation
 
 ### Human-Written with AI Assistance
@@ -119,6 +123,17 @@ Claude Code addressed final code review feedback:
 - **Test Reorganization**: Extracted circuit breaker tests to `test_circuit_breaker.py` and export tests to `test_export.py` to mirror source structure per CLAUDE.md conventions
 - **Testing**: 243 tests (239 unit + 4 integration) after reorganization
 
+### Session 10: Agent-Executable Tickets Feature
+Claude Code implemented AI-optimized ticket output:
+- **AgentContext Model**: Added `AgentContext` Pydantic model with `goal`, `exploration_paths`, `exploration_hints`, `known_patterns`, `verification_tests`, and `self_check` fields
+- **Story Model Update**: Added optional `agent_context` field to `Story` model (backward compatible)
+- **Prompt Update**: Updated `DECOMPOSE_TO_TICKETS_PROMPT` with guideline 8 for agent_context generation, including few-shot example
+- **Prompt Renderer**: Created `src/prd_decomposer/formatters.py` with `render_agent_prompt()` function for copy-paste prompts
+- **CLI Command**: Added `prompt N` command (with `copy N` and `show N` aliases) to agent CLI
+- **CSV Export**: Added `agent_prompt` column to CSV export format
+- **Architecture Fix**: Moved `render_agent_prompt` to server package to maintain proper dependency direction (agent imports from server, not vice versa)
+- **Testing**: Expanded from 243 to 305 tests
+
 ## Prompts Used
 
 Key prompts used during development:
@@ -149,7 +164,7 @@ This prompt pattern is adapted from the [Agentic Code Reviewer](https://github.c
 ## Quality Assurance
 
 - All AI-generated code was reviewed before committing
-- 243 tests (239 unit + 4 integration) with comprehensive coverage
+- 305 tests (301 unit + 4 integration) with comprehensive coverage
 - Arcade evals validate tool selection (8 eval cases)
 - Security review for path traversal and injection risks
 - Error handling review for LLM failure scenarios
