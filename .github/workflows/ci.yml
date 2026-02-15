@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run linter
+        run: uv run ruff check src/ tests/
+
+      - name: Run type checker
+        run: uv run mypy src/
+
+      - name: Run unit tests
+        run: uv run pytest tests/ -v --cov=prd_decomposer --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+
+  evals:
+    name: LLM Evals
+    runs-on: ubuntu-latest
+    # Only run evals on main branch pushes or when explicitly requested
+    # Evals cost money (API calls) so we don't run on every PR
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run Arcade evals
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          uv run arcade evals evals/ -o eval_results.json -o eval_results.md
+
+      - name: Upload eval results
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: |
+            eval_results.json
+            eval_results.md
+
+      - name: Post eval summary
+        run: |
+          echo "## Eval Results" >> $GITHUB_STEP_SUMMARY
+          cat eval_results.md >> $GITHUB_STEP_SUMMARY
+
+  # Optional: Run evals on PR when labeled
+  evals-pr:
+    name: LLM Evals (PR)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-evals')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run Arcade evals
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          uv run arcade evals evals/ -o eval_results.json -o eval_results.md
+
+      - name: Upload eval results
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: |
+            eval_results.json
+            eval_results.md
+
+      - name: Post eval summary
+        run: |
+          echo "## Eval Results" >> $GITHUB_STEP_SUMMARY
+          cat eval_results.md >> $GITHUB_STEP_SUMMARY

@@ -4,8 +4,11 @@ This eval suite validates:
 1. Tool selection intent - does the LLM pick the right tool?
 2. Parameter passing - are parameters correctly extracted?
 3. Workflow understanding - does the LLM understand the two-step process?
+
+Note: arcade-mcp namespaces tools as AppName_ToolName (e.g., PrdDecomposer_AnalyzePrd)
 """
 
+import json
 from pathlib import Path
 
 from arcade_evals import (
@@ -15,6 +18,11 @@ from arcade_evals import (
     SimilarityCritic,
     tool_eval,
 )
+
+# Tool names as exposed by arcade-mcp (AppName_ToolName format)
+TOOL_READ_FILE = "PrdDecomposer_ReadFile"
+TOOL_ANALYZE_PRD = "PrdDecomposer_AnalyzePrd"
+TOOL_DECOMPOSE = "PrdDecomposer_DecomposeToTickets"
 
 
 @tool_eval()
@@ -26,14 +34,14 @@ async def prd_eval_suite() -> EvalSuite:
         system_message="""You are a helpful engineering assistant that helps convert PRDs into Jira tickets.
 
 You have access to these tools:
-- read_file: Read a file from the filesystem
-- analyze_prd: Analyze PRD text and extract structured requirements
-- decompose_to_tickets: Convert requirements into Jira epics and stories
+- PrdDecomposer_ReadFile: Read a file from the filesystem
+- PrdDecomposer_AnalyzePrd: Analyze PRD text and extract structured requirements
+- PrdDecomposer_DecomposeToTickets: Convert requirements into Jira epics and stories
 
 Workflow:
-1. If given a file path, use read_file first
-2. Use analyze_prd to extract requirements from PRD text
-3. Use decompose_to_tickets to create Jira tickets from requirements""",
+1. If given a file path, use PrdDecomposer_ReadFile first
+2. Use PrdDecomposer_AnalyzePrd to extract requirements from PRD text
+3. Use PrdDecomposer_DecomposeToTickets to create Jira tickets from requirements""",
     )
 
     # Path to the MCP server
@@ -51,13 +59,13 @@ Workflow:
         user_message="I have a PRD for a new feature. Can you analyze it and extract the requirements? Here's the PRD:\n\n# Feature: User Settings\n\nUsers should be able to update their email preferences.",
         expected_tool_calls=[
             ExpectedMCPToolCall(
-                tool_name="analyze_prd",
-                parameters={
+                tool_name=TOOL_ANALYZE_PRD,
+                args={
                     "prd_text": "# Feature: User Settings\n\nUsers should be able to update their email preferences."
                 },
             )
         ],
-        critics=[BinaryCritic(critic_field="prd_text", weight=1.0)],
+        critics=[SimilarityCritic(critic_field="prd_text", weight=1.0, similarity_threshold=0.95)],
     )
 
     # Eval 2: Does the LLM select analyze_prd for implicit requests?
@@ -66,8 +74,8 @@ Workflow:
         user_message="What requirements are in this PRD?\n\n# API Versioning\n\nImplement API versioning with v1/v2 prefixes.",
         expected_tool_calls=[
             ExpectedMCPToolCall(
-                tool_name="analyze_prd",
-                parameters={
+                tool_name=TOOL_ANALYZE_PRD,
+                args={
                     "prd_text": "# API Versioning\n\nImplement API versioning with v1/v2 prefixes."
                 },
             )
@@ -91,16 +99,19 @@ Workflow:
         "summary": "Authentication feature",
         "source_hash": "abc12345",
     }
+    # Tool expects JSON string, not dict
+    sample_requirements_json = json.dumps(sample_requirements)
 
     suite.add_case(
         name="Decompose to tickets intent",
         user_message=f"Turn these requirements into Jira tickets: {sample_requirements}",
         expected_tool_calls=[
             ExpectedMCPToolCall(
-                tool_name="decompose_to_tickets", parameters={"requirements": sample_requirements}
+                tool_name=TOOL_DECOMPOSE, args={"requirements_json": sample_requirements_json}
             )
         ],
-        critics=[BinaryCritic(critic_field="requirements", weight=1.0)],
+        # Use similarity since whitespace/ordering may differ
+        critics=[SimilarityCritic(critic_field="requirements_json", weight=1.0, similarity_threshold=0.95)],
     )
 
     # Eval 4: Does the LLM understand "create stories" means decompose?
@@ -109,10 +120,10 @@ Workflow:
         user_message=f"Create Jira stories from these requirements: {sample_requirements}",
         expected_tool_calls=[
             ExpectedMCPToolCall(
-                tool_name="decompose_to_tickets", parameters={"requirements": sample_requirements}
+                tool_name=TOOL_DECOMPOSE, args={"requirements_json": sample_requirements_json}
             )
         ],
-        critics=[BinaryCritic(critic_field="requirements", weight=1.0)],
+        critics=[SimilarityCritic(critic_field="requirements_json", weight=1.0, similarity_threshold=0.95)],
     )
 
     # =========================================================================
@@ -125,8 +136,8 @@ Workflow:
         user_message="Analyze the PRD in samples/sample_prd_01_rate_limiting.md",
         expected_tool_calls=[
             ExpectedMCPToolCall(
-                tool_name="read_file",
-                parameters={"file_path": "samples/sample_prd_01_rate_limiting.md"},
+                tool_name=TOOL_READ_FILE,
+                args={"file_path": "samples/sample_prd_01_rate_limiting.md"},
             )
         ],
         critics=[
@@ -144,7 +155,7 @@ Workflow:
         user_message="Read and analyze docs/feature-spec.md for me",
         expected_tool_calls=[
             ExpectedMCPToolCall(
-                tool_name="read_file", parameters={"file_path": "docs/feature-spec.md"}
+                tool_name=TOOL_READ_FILE, args={"file_path": "docs/feature-spec.md"}
             )
         ],
         critics=[SimilarityCritic(critic_field="file_path", weight=1.0, similarity_threshold=0.8)],
@@ -171,7 +182,7 @@ Users must be able to reset their password via email.
         user_message=f"Extract the requirements from this PRD:\n\n{prd_with_clear_requirement}",
         expected_tool_calls=[
             ExpectedMCPToolCall(
-                tool_name="analyze_prd", parameters={"prd_text": prd_with_clear_requirement}
+                tool_name=TOOL_ANALYZE_PRD, args={"prd_text": prd_with_clear_requirement}
             )
         ],
         critics=[
@@ -193,7 +204,7 @@ It needs to scale well as we grow."""
         name="Handle vague PRD language",
         user_message=f"What requirements can you extract from this? Flag any ambiguities:\n\n{vague_prd}",
         expected_tool_calls=[
-            ExpectedMCPToolCall(tool_name="analyze_prd", parameters={"prd_text": vague_prd})
+            ExpectedMCPToolCall(tool_name=TOOL_ANALYZE_PRD, args={"prd_text": vague_prd})
         ],
         critics=[BinaryCritic(critic_field="prd_text", weight=1.0)],
     )
