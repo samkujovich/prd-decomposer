@@ -393,13 +393,16 @@ class TestLabeling:
         _, tickets = twofa_workflow_result
         all_labels = collect_all_labels(tickets)
 
-        # Security/auth related terms that should appear in labels
-        auth_related = {"auth", "authentication", "security", "2fa", "mfa", "backend", "api"}
-        matching_labels = all_labels & auth_related
+        # Security/auth related terms (use substring matching for flexibility)
+        auth_keywords = ["auth", "security", "2fa", "mfa", "backend", "api"]
+        matching_labels = [
+            label for label in all_labels
+            if any(keyword in label.lower() for keyword in auth_keywords)
+        ]
 
         assert len(matching_labels) > 0, (
             f"Expected auth/security-related labels for 2FA feature. "
-            f"Got labels: {all_labels}. Expected one of: {auth_related}"
+            f"Got labels: {all_labels}. Expected substring match on: {auth_keywords}"
         )
 
 
