@@ -595,3 +595,143 @@ class TestYAMLExportWithPyyaml:
         tickets = {"epics": []}
         result = export_tickets(json.dumps(tickets), output_format="yaml")
         assert "epics:" in result
+
+
+class TestJiraAgentContextExport:
+    """Tests for Jira export with agent_context in description."""
+
+    def test_jira_export_includes_agent_context(self):
+        """Jira export includes agent_context in story description."""
+        tickets = {
+            "epics": [{
+                "title": "Epic",
+                "description": "Desc",
+                "stories": [{
+                    "title": "Story",
+                    "description": "Do thing",
+                    "size": "M",
+                    "priority": "high",
+                    "acceptance_criteria": ["AC1"],
+                    "labels": [],
+                    "requirement_ids": [],
+                    "agent_context": {
+                        "goal": "Enable password reset for users",
+                        "exploration_paths": ["auth", "email"],
+                        "exploration_hints": ["src/auth/"],
+                        "known_patterns": ["Use JWT tokens"],
+                        "verification_tests": ["test_reset_flow"],
+                        "self_check": ["Is token secure?", "What if email fails?"],
+                    },
+                }],
+                "labels": [],
+            }],
+        }
+        result = export_tickets(json.dumps(tickets), output_format="jira")
+        parsed = json.loads(result)
+
+        # Get story description text
+        story_desc = parsed["issueUpdates"][1]["fields"]["description"]
+        desc_text = story_desc["content"][0]["content"][0]["text"]
+
+        # Verify agent context fields are in description
+        assert "AI Implementation Context" in desc_text
+        assert "Enable password reset for users" in desc_text
+        assert "auth, email" in desc_text
+        assert "src/auth/" in desc_text
+        assert "Use JWT tokens" in desc_text
+        assert "test_reset_flow" in desc_text
+        assert "Is token secure?" in desc_text
+        assert "What if email fails?" in desc_text
+
+    def test_jira_export_without_agent_context(self):
+        """Jira export works when story has no agent_context."""
+        tickets = {
+            "epics": [{
+                "title": "Epic",
+                "description": "Desc",
+                "stories": [{
+                    "title": "Story",
+                    "description": "Do thing",
+                    "size": "S",
+                    "priority": "medium",
+                    "acceptance_criteria": [],
+                    "labels": [],
+                    "requirement_ids": [],
+                    # No agent_context
+                }],
+                "labels": [],
+            }],
+        }
+        result = export_tickets(json.dumps(tickets), output_format="jira")
+        parsed = json.loads(result)
+
+        story_desc = parsed["issueUpdates"][1]["fields"]["description"]
+        desc_text = story_desc["content"][0]["content"][0]["text"]
+
+        # Should not have AI context section
+        assert "AI Implementation Context" not in desc_text
+
+
+class TestYAMLAgentContextExport:
+    """Tests for YAML export with agent_context."""
+
+    def test_yaml_export_includes_agent_context(self):
+        """YAML export includes agent_context in story."""
+        tickets = {
+            "epics": [{
+                "title": "Epic",
+                "description": "Desc",
+                "stories": [{
+                    "title": "Story",
+                    "description": "Do thing",
+                    "size": "M",
+                    "priority": "high",
+                    "acceptance_criteria": [],
+                    "labels": [],
+                    "requirement_ids": [],
+                    "agent_context": {
+                        "goal": "Enable feature X",
+                        "exploration_paths": ["module_a"],
+                        "exploration_hints": ["src/feature/"],
+                        "known_patterns": ["Follow pattern Y"],
+                        "verification_tests": ["test_x"],
+                        "self_check": ["Edge case?"],
+                    },
+                }],
+                "labels": [],
+            }],
+        }
+        result = export_tickets(json.dumps(tickets), output_format="yaml")
+
+        assert "agent_context:" in result
+        assert "goal:" in result
+        assert "Enable feature X" in result
+        assert "exploration_paths:" in result
+        assert "exploration_hints:" in result
+        assert "known_patterns:" in result
+        assert "verification_tests:" in result
+        assert "self_check:" in result
+
+    def test_yaml_export_without_agent_context(self):
+        """YAML export works when story has no agent_context."""
+        tickets = {
+            "epics": [{
+                "title": "Epic",
+                "description": "Desc",
+                "stories": [{
+                    "title": "Story",
+                    "description": "Do thing",
+                    "size": "S",
+                    "priority": "low",
+                    "acceptance_criteria": [],
+                    "labels": [],
+                    "requirement_ids": [],
+                    # No agent_context
+                }],
+                "labels": [],
+            }],
+        }
+        result = export_tickets(json.dumps(tickets), output_format="yaml")
+
+        # Should not have agent_context key
+        assert "agent_context:" not in result
