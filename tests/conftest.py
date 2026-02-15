@@ -7,8 +7,8 @@ import pytest
 
 import prd_decomposer.config as config_module
 import prd_decomposer.server as server_module
+from prd_decomposer.circuit_breaker import CircuitBreaker, RateLimiter
 from prd_decomposer.log import correlation_id
-from prd_decomposer.server import CircuitBreaker, RateLimiter
 
 
 @pytest.fixture(autouse=True)
@@ -18,6 +18,7 @@ def reset_globals():
     server_module._client = None
     server_module._rate_limiter = None
     server_module._circuit_breaker = None
+    server_module._logging_initialized = False
     config_module._settings = None
     correlation_id.set("")
 

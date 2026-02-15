@@ -17,21 +17,8 @@ from arcade_mcp_server import MCPApp
 from openai import APIConnectionError, APIError, APITimeoutError, OpenAI, RateLimitError
 from pydantic import ValidationError
 
-from prd_decomposer.circuit_breaker import (
-    CircuitBreaker,
-    CircuitBreakerOpenError,
-    RateLimiter,
-    RateLimitExceededError,
-)
+from prd_decomposer.circuit_breaker import CircuitBreaker, RateLimiter
 from prd_decomposer.config import Settings, get_settings
-
-# Re-export for backwards compatibility - used by tests
-__all__ = [
-    "CircuitBreaker",
-    "CircuitBreakerOpenError",
-    "RateLimitExceededError",
-    "RateLimiter",
-]
 from prd_decomposer.export import export_tickets as _export_tickets_impl
 from prd_decomposer.log import correlation_id, setup_logging
 from prd_decomposer.models import SizingRubric, StructuredRequirements, TicketCollection
@@ -379,7 +366,7 @@ def _analyze_prd_impl(
     correlation_id.set(request_id)
 
     logger.info("Starting PRD analysis, prd_length=%d", len(prd_text))
-    start_time = time.time()
+    start_time = time.monotonic()
 
     # Validate input length (security: prevent resource exhaustion)
     if len(prd_text) > settings.max_prd_length:
@@ -391,13 +378,9 @@ def _analyze_prd_impl(
     # Generate source hash for traceability
     source_hash = hashlib.sha256(prd_text.encode()).hexdigest()[:16]
 
-    messages = [
-        {
-            "role": "system",
-            "content": ANALYZE_PRD_PROMPT.format(prd_text=prd_text),
-        },
-        {"role": "user", "content": f"Analyze the PRD above. Use source_hash: {source_hash}"},
-    ]
+    # Single user message with prompt and PRD (original design)
+    prompt_content = ANALYZE_PRD_PROMPT.format(prd_text=prd_text)
+    messages = [{"role": "user", "content": prompt_content}]
 
     try:
         data, usage = _call_llm_with_retry(
@@ -414,7 +397,7 @@ def _analyze_prd_impl(
         logger.error("PRD analysis failed: invalid LLM response")
         raise LLMError(f"LLM returned invalid structure: {e}")
 
-    elapsed = time.time() - start_time
+    elapsed = time.monotonic() - start_time
     logger.info(
         "PRD analysis complete, requirements=%d, elapsed=%.2fs, tokens=%s",
         len(validated.requirements), elapsed, usage.get("total_tokens", "N/A"),
@@ -508,17 +491,13 @@ def _decompose_to_tickets_impl(
             "Consider processing in smaller batches."
         )
 
-    start_time = time.time()
+    start_time = time.monotonic()
 
-    messages = [
-        {
-            "role": "system",
-            "content": DECOMPOSE_TO_TICKETS_PROMPT.format(
-                sizing_rubric=rubric_text, requirements_json=requirements_json
-            ),
-        },
-        {"role": "user", "content": "Process the requirements above and generate tickets."},
-    ]
+    # Single user message with prompt and requirements (consistent with analyze_prd)
+    prompt_content = DECOMPOSE_TO_TICKETS_PROMPT.format(
+        sizing_rubric=rubric_text, requirements_json=requirements_json
+    )
+    messages = [{"role": "user", "content": prompt_content}]
 
     data, usage = _call_llm_with_retry(
         messages=messages, temperature=settings.decompose_temperature, client=client, settings=settings
@@ -530,7 +509,7 @@ def _decompose_to_tickets_impl(
     except ValidationError as e:
         raise LLMError(f"LLM returned invalid structure: {e}")
 
-    elapsed = time.time() - start_time
+    elapsed = time.monotonic() - start_time
     story_count = sum(len(epic.stories) for epic in validated.epics)
 
     logger.info(

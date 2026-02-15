@@ -12,16 +12,19 @@ import pytest
 from arcade_core.errors import FatalToolError
 from openai import APIConnectionError, APIError, APITimeoutError, RateLimitError
 
+from prd_decomposer.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerOpenError,
+    RateLimiter,
+    RateLimitExceededError,
+)
 from prd_decomposer.config import Settings
+from prd_decomposer.export import _map_priority_to_jira
 from prd_decomposer.log import correlation_id
 from prd_decomposer.models import SizingRubric
 from prd_decomposer.prompts import PROMPT_VERSION
 from prd_decomposer.server import (
-    CircuitBreaker,
-    CircuitBreakerOpenError,
     LLMError,
-    RateLimiter,
-    RateLimitExceededError,
     _analyze_prd_impl,
     _call_llm_with_retry,
     _decompose_to_tickets_impl,
@@ -2022,35 +2025,14 @@ class TestCircuitBreakerBugFixes:
 
 
 class TestJiraPriorityMapping:
-    """Tests for Jira priority mapping robustness."""
-
-    def test_map_priority_non_string_int(self):
-        """Verify _map_priority_to_jira coerces int to string."""
-        from prd_decomposer.export import _map_priority_to_jira
-        # Integer priority should be coerced to string
-        result = _map_priority_to_jira(1)
-        assert result == "Medium"  # Falls through to default since "1" isn't a valid key
-
-    def test_map_priority_non_string_none(self):
-        """Verify _map_priority_to_jira handles None."""
-        from prd_decomposer.export import _map_priority_to_jira
-        result = _map_priority_to_jira(None)
-        assert result == "Medium"
-
-    def test_map_priority_non_string_bool(self):
-        """Verify _map_priority_to_jira coerces bool to string."""
-        from prd_decomposer.export import _map_priority_to_jira
-        result = _map_priority_to_jira(True)
-        assert result == "Medium"  # Falls through to default
+    """Tests for Jira priority mapping."""
 
     def test_map_priority_valid_strings(self):
-        """Verify _map_priority_to_jira handles valid string priorities."""
-        from prd_decomposer.export import _map_priority_to_jira
+        """Verify _map_priority_to_jira maps valid priorities."""
+        # Pydantic validates input as Literal["high", "medium", "low"]
         assert _map_priority_to_jira("high") == "High"
-        assert _map_priority_to_jira("HIGH") == "High"
         assert _map_priority_to_jira("medium") == "Medium"
         assert _map_priority_to_jira("low") == "Low"
-        assert _map_priority_to_jira("unknown") == "Medium"
 
 
 class TestNestedFieldValidation:

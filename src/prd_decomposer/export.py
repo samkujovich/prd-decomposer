@@ -54,7 +54,7 @@ def export_tickets(
         for err in e.errors():
             loc = ".".join(str(x) for x in err["loc"])
             errors.append(f"{loc}: {err['msg']}")
-        raise ValueError("Invalid ticket structure:\n" + "\n".join(errors))
+        raise ValueError("Invalid ticket structure:\n" + "\n".join(errors)) from e
 
     format_lower = output_format.lower()
 
@@ -102,22 +102,12 @@ def _export_to_csv(tickets: TicketCollection) -> str:
     return output.getvalue()
 
 
-def _map_priority_to_jira(priority: str | None) -> str:
+def _map_priority_to_jira(priority: str) -> str:
     """Map internal priority to Jira priority names.
 
-    Handles non-string inputs gracefully by coercing to string first.
-    Invalid or unrecognized priorities default to "Medium".
+    Input is validated by Pydantic as Literal["high", "medium", "low"].
     """
-    if priority is None:
-        return "Medium"
-    # Coerce to string for robustness
-    priority_str = str(priority).lower()
-    mapping = {
-        "high": "High",
-        "medium": "Medium",
-        "low": "Low",
-    }
-    return mapping.get(priority_str, "Medium")
+    return {"high": "High", "medium": "Medium", "low": "Low"}[priority]
 
 
 def _export_to_jira(tickets: TicketCollection, project_key: str) -> str:
@@ -187,9 +177,12 @@ def _export_to_jira(tickets: TicketCollection, project_key: str) -> str:
 
 def _export_to_yaml(tickets: TicketCollection) -> str:
     """Export tickets to YAML format using pyyaml for spec-compliant output."""
-    # Build output structure
+    # Build output structure with metadata
     output: dict[str, Any] = {
-        "_comment": f"PRD Decomposer Export - Generated: {datetime.now(UTC).isoformat()}",
+        "_metadata": {
+            "generator": "PRD Decomposer",
+            "generated_at": datetime.now(UTC).isoformat(),
+        },
         "epics": [],
     }
 
