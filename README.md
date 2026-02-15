@@ -116,6 +116,19 @@ Environment variables with `PRD_` prefix (via pydantic-settings):
 - `PRD_CIRCUIT_BREAKER_FAILURE_THRESHOLD` - Failures before circuit opens, 1-20 (default: `5`)
 - `PRD_CIRCUIT_BREAKER_RESET_TIMEOUT` - Seconds before half-open probe, 1-300 (default: `60`)
 
+### AI-Executable Tickets
+
+Stories include optional `agent_context` for AI coding assistants:
+
+- **goal**: Why this work matters (the problem being solved)
+- **exploration_paths**: Keywords to search in codebase
+- **exploration_hints**: Specific files/modules to start with
+- **known_patterns**: Libraries and conventions to follow
+- **verification_tests**: Tests that should pass when done
+- **self_check**: Questions to verify before completion
+
+Use `prompt N` in the agent to get a copy-pasteable prompt for any story.
+
 ## Key Decisions
 
 | Decision | Choice | Rationale | Alternative Considered |
