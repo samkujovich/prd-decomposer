@@ -89,13 +89,18 @@ You have access to these tools via the MCP server:
 
 5. **Present results**:
    - Show the epic/story structure clearly
-   - For each story, ALWAYS include the agent_context section showing:
-     - Goal: why this work matters
-     - Exploration paths: keywords to search
-     - Verification tests: how to verify completion
-     - Self-check: questions to validate correctness
-   - This AI context helps developers and AI assistants implement the story
-   - Offer to export (csv, jira, yaml)
+   - For EACH story, display an "AI Implementation Context" block with ALL fields:
+     ```
+     **AI Implementation Context:**
+     - Goal: [from agent_context.goal]
+     - Exploration paths: [from agent_context.exploration_paths]
+     - Start with: [from agent_context.exploration_hints]
+     - Patterns: [from agent_context.known_patterns]
+     - Verification: [from agent_context.verification_tests]
+     - Self-check: [from agent_context.self_check]
+     ```
+   - CRITICAL: Show ALL 6 fields above for EVERY story - do NOT skip any
+   - After showing all stories with their AI context, offer to export (csv, jira, yaml)
 
 6. **Export tickets**:
    - When user says "jira", "csv", or "yaml", call export_tickets with that format
