@@ -12,9 +12,10 @@ from arcade_core.errors import FatalToolError
 from openai import APIConnectionError, APIError, APITimeoutError, RateLimitError
 
 from prd_decomposer.config import Settings
-from prd_decomposer.logging import correlation_id
 from prd_decomposer.server import (
     LLMError,
+    RateLimiter,
+    RateLimitExceededError,
     _analyze_prd_impl,
     _call_llm_with_retry,
     _decompose_to_tickets_impl,
@@ -423,6 +424,78 @@ class TestLLMRetry:
         # Verify timeout was passed to the API call
         call_kwargs = mock_client.chat.completions.create.call_args.kwargs
         assert call_kwargs["timeout"] == 45.0
+
+
+class TestRateLimiter:
+    """Tests for the RateLimiter class."""
+
+    def test_rate_limiter_allows_calls_within_limit(self):
+        """Verify rate limiter allows calls within the configured limit."""
+        limiter = RateLimiter(max_calls=5, window_seconds=60)
+
+        # Should allow 5 calls
+        for _ in range(5):
+            limiter.check_and_record()  # Should not raise
+
+    def test_rate_limiter_blocks_calls_exceeding_limit(self):
+        """Verify rate limiter blocks calls that exceed the limit."""
+        limiter = RateLimiter(max_calls=3, window_seconds=60)
+
+        # First 3 calls should succeed
+        for _ in range(3):
+            limiter.check_and_record()
+
+        # 4th call should be blocked
+        with pytest.raises(RateLimitExceededError, match="Rate limit exceeded"):
+            limiter.check_and_record()
+
+    def test_rate_limiter_resets_after_window(self):
+        """Verify rate limiter allows calls after window expires."""
+        limiter = RateLimiter(max_calls=2, window_seconds=1)
+
+        # Use up the limit
+        limiter.check_and_record()
+        limiter.check_and_record()
+
+        # Wait for window to expire
+        import time
+        time.sleep(1.1)
+
+        # Should allow new calls
+        limiter.check_and_record()  # Should not raise
+
+    def test_rate_limiter_reset_clears_calls(self):
+        """Verify reset() clears the call history."""
+        limiter = RateLimiter(max_calls=2, window_seconds=60)
+
+        # Use up the limit
+        limiter.check_and_record()
+        limiter.check_and_record()
+
+        # Reset should clear
+        limiter.reset()
+
+        # Should allow calls again
+        limiter.check_and_record()  # Should not raise
+
+    def test_call_llm_with_retry_respects_rate_limit(self):
+        """Verify _call_llm_with_retry raises when rate limit exceeded."""
+        # Create a rate limiter that's already at limit
+        limiter = RateLimiter(max_calls=1, window_seconds=60)
+        limiter.check_and_record()  # Use up the limit
+
+        mock_client = MagicMock()
+
+        with pytest.raises(RateLimitExceededError, match="Rate limit exceeded"):
+            _call_llm_with_retry(
+                [{"role": "user", "content": "test"}],
+                temperature=0.2,
+                client=mock_client,
+                rate_limiter=limiter,
+            )
+
+        # Verify the LLM was never called
+        mock_client.chat.completions.create.assert_not_called()
 
 
 class TestAnalyzePrd:

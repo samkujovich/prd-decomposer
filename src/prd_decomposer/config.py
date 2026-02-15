@@ -59,6 +59,20 @@ class Settings(BaseSettings):
         description="Maximum PRD text length in characters (1000-500000)",
     )
 
+    # Rate limiting settings
+    rate_limit_calls: int = Field(
+        default=60,
+        ge=1,
+        le=1000,
+        description="Maximum LLM calls per rate limit window (1-1000)",
+    )
+    rate_limit_window: int = Field(
+        default=60,
+        ge=1,
+        le=3600,
+        description="Rate limit window in seconds (1-3600)",
+    )
+
 
 # Singleton for convenience (thread-safe with double-checked locking)
 _settings: Settings | None = None

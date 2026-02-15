@@ -46,6 +46,71 @@ class LLMError(Exception):
     pass
 
 
+class RateLimitExceededError(Exception):
+    """Raised when rate limit is exceeded."""
+
+    pass
+
+
+class RateLimiter:
+    """Thread-safe in-memory rate limiter using sliding window.
+
+    Tracks call timestamps and rejects calls that exceed the configured
+    rate limit within the time window.
+    """
+
+    def __init__(self, max_calls: int, window_seconds: int):
+        self.max_calls = max_calls
+        self.window_seconds = window_seconds
+        self._calls: list[float] = []
+        self._lock = threading.Lock()
+
+    def check_and_record(self) -> None:
+        """Check rate limit and record a call.
+
+        Raises:
+            RateLimitExceededError: If rate limit is exceeded.
+        """
+        now = time.time()
+
+        with self._lock:
+            # Remove calls outside the window
+            cutoff = now - self.window_seconds
+            self._calls = [t for t in self._calls if t > cutoff]
+
+            if len(self._calls) >= self.max_calls:
+                raise RateLimitExceededError(
+                    f"Rate limit exceeded: {self.max_calls} calls per {self.window_seconds}s. "
+                    f"Try again in {self._calls[0] + self.window_seconds - now:.1f}s."
+                )
+
+            self._calls.append(now)
+
+    def reset(self) -> None:
+        """Reset the rate limiter (mainly for testing)."""
+        with self._lock:
+            self._calls = []
+
+
+# Global rate limiter instance (initialized lazily)
+_rate_limiter: RateLimiter | None = None
+_rate_limiter_lock = threading.Lock()
+
+
+def get_rate_limiter(settings: Settings | None = None) -> RateLimiter:
+    """Get or create the global RateLimiter instance."""
+    global _rate_limiter
+    if _rate_limiter is None:
+        with _rate_limiter_lock:
+            if _rate_limiter is None:
+                settings = settings or get_settings()
+                _rate_limiter = RateLimiter(
+                    max_calls=settings.rate_limit_calls,
+                    window_seconds=settings.rate_limit_window,
+                )
+    return _rate_limiter
+
+
 def _is_path_allowed(path: Path) -> bool:
     """Check if a path is within allowed directories.
 
@@ -102,6 +167,7 @@ def _call_llm_with_retry(
     temperature: float,
     client: OpenAI | None = None,
     settings: Settings | None = None,
+    rate_limiter: RateLimiter | None = None,
 ) -> tuple[dict, dict]:
     """Call LLM with exponential backoff retry.
 
@@ -110,9 +176,14 @@ def _call_llm_with_retry(
 
     Raises:
         LLMError: If all retries fail or response is invalid.
+        RateLimitExceededError: If rate limit is exceeded.
     """
     client = client or get_client()
     settings = settings or get_settings()
+    rate_limiter = rate_limiter or get_rate_limiter(settings)
+
+    # Check rate limit before making call
+    rate_limiter.check_and_record()
 
     last_error = None
 

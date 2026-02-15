@@ -176,6 +176,43 @@ class TestSettings:
         assert settings_min.max_prd_length == 1000
         assert settings_max.max_prd_length == 500000
 
+    def test_settings_has_default_rate_limit(self):
+        """Verify Settings has default rate limit of 60 calls per 60 seconds."""
+        settings = Settings()
+        assert settings.rate_limit_calls == 60
+        assert settings.rate_limit_window == 60
+
+    def test_settings_rate_limit_from_env(self, monkeypatch):
+        """Verify rate limit settings load from environment variables."""
+        monkeypatch.setenv("PRD_RATE_LIMIT_CALLS", "100")
+        monkeypatch.setenv("PRD_RATE_LIMIT_WINDOW", "120")
+        settings = Settings()
+        assert settings.rate_limit_calls == 100
+        assert settings.rate_limit_window == 120
+
+    def test_settings_rate_limit_calls_bounds(self):
+        """Verify rate_limit_calls rejects values outside 1-1000."""
+        with pytest.raises(ValidationError):
+            Settings(rate_limit_calls=0)
+        with pytest.raises(ValidationError):
+            Settings(rate_limit_calls=1001)
+
+    def test_settings_rate_limit_window_bounds(self):
+        """Verify rate_limit_window rejects values outside 1-3600."""
+        with pytest.raises(ValidationError):
+            Settings(rate_limit_window=0)
+        with pytest.raises(ValidationError):
+            Settings(rate_limit_window=3601)
+
+    def test_settings_rate_limit_valid_bounds(self):
+        """Verify rate limit settings accept values within bounds."""
+        settings = Settings(rate_limit_calls=1, rate_limit_window=1)
+        assert settings.rate_limit_calls == 1
+        assert settings.rate_limit_window == 1
+        settings = Settings(rate_limit_calls=1000, rate_limit_window=3600)
+        assert settings.rate_limit_calls == 1000
+        assert settings.rate_limit_window == 3600
+
 
 class TestGetSettings:
     """Tests for get_settings function."""
