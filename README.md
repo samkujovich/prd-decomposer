@@ -95,6 +95,13 @@ Checks service health and OpenAI API connectivity.
 - Prompt versioning for traceability (`PROMPT_VERSION`)
 - Generation timestamps and model info in outputs
 
+### Cost Efficiency
+Using GPT-4o (as of Feb 2026):
+- Typical PRD analysis: ~$0.02-0.05
+- Ticket decomposition: ~$0.03-0.08
+- Full workflow: ~$0.05-0.15 per PRD
+- Process 50 PRDs/month for under $10
+
 ### Configuration
 Environment variables with `PRD_` prefix (via pydantic-settings):
 - `PRD_OPENAI_MODEL` - Model to use (default: `gpt-4o`)
