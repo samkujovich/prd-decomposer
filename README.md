@@ -198,12 +198,31 @@ uv run python src/prd_decomposer/server.py
 ### Run Tests
 
 ```bash
-# Unit tests (243 tests)
+# Unit tests (243 tests, no API key required)
 uv run pytest tests/ -v
 
 # With coverage report
 uv run pytest tests/ --cov=prd_decomposer --cov-report=term-missing
 ```
+
+### Run Evals
+
+Two evaluation suites validate quality (both require `OPENAI_API_KEY`):
+
+```bash
+# Tool Selection Evals - does the LLM pick the right tool?
+uv run arcade evals evals/eval_prd_tools.py
+
+# Output Quality Evals - are tool outputs correct?
+uv run pytest evals/eval_output_quality.py -v
+```
+
+Output quality evals validate:
+- Vague quantifiers ("fast", "scalable") flagged as ambiguities
+- Clear PRDs with explicit criteria have no critical ambiguities
+- Stories have valid `requirement_ids` linking to source requirements
+- Epic count is reasonable (1-4 for single-feature PRD)
+- All stories have valid T-shirt sizes (S/M/L)
 
 ## Sample PRDs
 
