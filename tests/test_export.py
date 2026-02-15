@@ -449,6 +449,40 @@ class TestNullStoriesHandling:
         assert "stories:" in result
 
 
+class TestCSVAgentPromptExport:
+    """Tests for CSV export with agent_prompt column."""
+
+    def test_csv_export_includes_agent_prompt(self):
+        """CSV export includes agent_prompt column."""
+        tickets = {
+            "epics": [{
+                "title": "Epic",
+                "description": "Desc",
+                "stories": [{
+                    "title": "Story",
+                    "description": "Do thing",
+                    "size": "M",
+                    "acceptance_criteria": [],
+                    "labels": [],
+                    "requirement_ids": [],
+                    "agent_context": {
+                        "goal": "The why",
+                        "exploration_paths": [],
+                        "exploration_hints": [],
+                        "known_patterns": [],
+                        "verification_tests": [],
+                        "self_check": [],
+                    },
+                }],
+                "labels": [],
+            }],
+        }
+        result = export_tickets(json.dumps(tickets), output_format="csv")
+
+        assert "agent_prompt" in result
+        assert "The why" in result
+
+
 class TestYAMLExportWithPyyaml:
     """Tests for YAML export using pyyaml serialization."""
 

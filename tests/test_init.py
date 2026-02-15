@@ -22,6 +22,7 @@ EXPECTED_EXPORTS = {
     "TicketCollection",
     "export_tickets",
     "get_settings",
+    "render_agent_prompt",
 }
 
 

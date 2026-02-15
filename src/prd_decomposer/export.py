@@ -70,6 +70,8 @@ def export_tickets(
 
 def _export_to_csv(tickets: TicketCollection) -> str:
     """Export tickets to CSV format."""
+    from prd_decomposer.formatters import render_agent_prompt
+
     output = io.StringIO()
     writer = csv.writer(output)
 
@@ -83,11 +85,14 @@ def _export_to_csv(tickets: TicketCollection) -> str:
         "priority",
         "labels",
         "requirement_ids",
+        "agent_prompt",
     ])
 
     # Data rows
     for epic in tickets.epics:
         for story in epic.stories:
+            # Convert Pydantic model to dict for render_agent_prompt
+            story_dict = story.model_dump()
             writer.writerow([
                 epic.title,
                 story.title,
@@ -97,6 +102,7 @@ def _export_to_csv(tickets: TicketCollection) -> str:
                 story.priority,
                 ", ".join(story.labels),
                 ", ".join(story.requirement_ids),
+                render_agent_prompt(story_dict),
             ])
 
     return output.getvalue()
