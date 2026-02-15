@@ -32,6 +32,12 @@ See [Future Iterations](#future-iterations) for planned enhancements.
 
 ![Architecture Diagram](docs/diagrams/architecture.svg)
 
+## Demo
+
+[![PRD Decomposer Demo](https://img.youtube.com/vi/3AyErYYKEO0/maxresdefault.jpg)](https://youtu.be/3AyErYYKEO0)
+
+*Analyzes a sample PRD, extracts structured requirements with ambiguity detection, and generates Jira-ready epics and stories.*
+
 ## Tools
 
 ### `read_file`
