@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_evals:
+        description: 'Run LLM evals'
+        type: boolean
+        default: false
 
 jobs:
   test:
@@ -39,12 +45,35 @@ jobs:
           files: coverage.xml
           fail_ci_if_error: false
 
+  # Detect if prompt or eval files changed
+  check-changes:
+    name: Check for prompt/eval changes
+    runs-on: ubuntu-latest
+    outputs:
+      prompts_changed: ${{ steps.filter.outputs.prompts }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            prompts:
+              - 'src/prd_decomposer/prompts.py'
+              - 'evals/**'
+
+  # LLM Evals - run when prompts change or explicitly requested
+  # Triggers:
+  #   1. Prompts or eval files changed (auto-detected)
+  #   2. Manual workflow dispatch with run_evals=true
+  #   3. PR with 'run-evals' label
   evals:
     name: LLM Evals
     runs-on: ubuntu-latest
-    # Only run evals on main branch pushes or when explicitly requested
-    # Evals cost money (API calls) so we don't run on every PR
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [check-changes]
+    if: |
+      (needs.check-changes.outputs.prompts_changed == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.run_evals) ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-evals'))
     steps:
       - uses: actions/checkout@v4
 
@@ -63,55 +92,17 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          uv run arcade evals evals/ -o eval_results.json -o eval_results.md
+          uv run arcade evals evals/ --output eval_results.json
 
       - name: Upload eval results
         uses: actions/upload-artifact@v4
         with:
           name: eval-results
-          path: |
-            eval_results.json
-            eval_results.md
+          path: eval_results.json
 
       - name: Post eval summary
         run: |
           echo "## Eval Results" >> $GITHUB_STEP_SUMMARY
-          cat eval_results.md >> $GITHUB_STEP_SUMMARY
-
-  # Optional: Run evals on PR when labeled
-  evals-pr:
-    name: LLM Evals (PR)
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-evals')
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          version: "latest"
-
-      - name: Set up Python
-        run: uv python install 3.11
-
-      - name: Install dependencies
-        run: uv sync --all-extras
-
-      - name: Run Arcade evals
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          uv run arcade evals evals/ -o eval_results.json -o eval_results.md
-
-      - name: Upload eval results
-        uses: actions/upload-artifact@v4
-        with:
-          name: eval-results
-          path: |
-            eval_results.json
-            eval_results.md
-
-      - name: Post eval summary
-        run: |
-          echo "## Eval Results" >> $GITHUB_STEP_SUMMARY
-          cat eval_results.md >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat eval_results.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
