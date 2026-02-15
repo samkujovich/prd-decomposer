@@ -12,6 +12,22 @@ Most engineering teams share the same broken workflow: a PM writes a PRD in Goog
 
 An MCP server that gives AI agents the ability to analyze a PRD, extract structured requirements, identify gaps and ambiguities, and decompose the whole thing into ready-to-create epics and stories—structured in a format that can feed directly into Jira. The agent handles the translation layer so humans don't have to.
 
+## Current Scope / Non-Goals
+
+**What this project does:**
+- Extracts structured requirements from PRD text with ambiguity detection
+- Generates Jira-compatible epics/stories with sizing, labels, and acceptance criteria
+- Exports to CSV, Jira REST API format, and YAML for integration
+- Provides AI agent context (`agent_context`) for downstream coding assistants
+
+**What this project does NOT do (intentional non-goals for v1):**
+- **No direct Jira integration** — Output is Jira-compatible JSON; actual ticket creation is left to [Arcade's Jira toolkit](https://docs.arcade.ai/tools/atlassian) or manual import
+- **No document source integrations** — PRDs must be local files or pasted text; Google Docs/Notion/Confluence connectors are future work
+- **No bidirectional sync** — This is a one-way PRD→tickets flow; tracking changes over time is out of scope
+- **No multi-user/auth** — Designed for single-user CLI usage; no API authentication layer
+
+See [Future Iterations](#future-iterations) for planned enhancements.
+
 ## Architecture
 
 ![Architecture Diagram](docs/diagrams/architecture.svg)
@@ -61,14 +77,15 @@ Exports ticket collections to different formats for integration with external to
 
 ### `health_check`
 
-Checks service health and OpenAI API connectivity.
+Checks service health and internal component status.
 
 **Output:** Status information including:
 - Service status (healthy/degraded/unhealthy)
-- OpenAI API connectivity
 - Circuit breaker state
 - Rate limiter status
 - Configuration summary
+
+**Note:** Does not probe the OpenAI API directly; reflects circuit breaker state from recent LLM calls.
 
 ## Features
 
