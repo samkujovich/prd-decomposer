@@ -12,14 +12,26 @@ from agents import Agent, Runner
 from agents.items import TResponseInputItem
 from agents.mcp import MCPServerStdio, MCPServerStdioParams
 
-from agent.formatters import (
-    format_analysis_summary,
-    format_requirements_table,
-    format_ticket_summary,
-    format_tickets_hierarchy,
-    render_agent_prompt,
-)
-from agent.session_state import SessionState
+try:
+    # When running as a module (e.g., pytest imports agent.agent)
+    from agent.formatters import (
+        format_analysis_summary,
+        format_requirements_table,
+        format_ticket_summary,
+        format_tickets_hierarchy,
+        render_agent_prompt,
+    )
+    from agent.session_state import SessionState
+except ImportError:
+    # When running as a script (e.g., python agent/agent.py)
+    from formatters import (  # type: ignore[import-not-found]
+        format_analysis_summary,
+        format_requirements_table,
+        format_ticket_summary,
+        format_tickets_hierarchy,
+        render_agent_prompt,
+    )
+    from session_state import SessionState  # type: ignore[import-not-found]
 
 # Retry configuration for MCP server connection
 MAX_CONNECTION_RETRIES = 3
