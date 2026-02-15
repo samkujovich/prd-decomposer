@@ -10,6 +10,29 @@ from agent.formatters import (
 from agent.session_state import SessionState
 
 
+def _flag(
+    category: str,
+    severity: str,
+    issue: str,
+    action: str | None = None,
+) -> dict:
+    """Create an ambiguity flag dict for testing."""
+    result = {"category": category, "severity": severity, "issue": issue}
+    if action:
+        result["suggested_action"] = action
+    return result
+
+
+def _req(
+    req_id: str,
+    title: str = "Test",
+    flags: list[dict] | None = None,
+    **kwargs,
+) -> dict:
+    """Create a requirement dict for testing."""
+    return {"id": req_id, "title": title, "ambiguity_flags": flags or [], **kwargs}
+
+
 class TestParseCommand:
     """Tests for parse_command function."""
 
@@ -114,7 +137,8 @@ Let me know if you need changes.'''
     def test_extract_nested_json(self):
         """Extract requirements with nested objects."""
         output = '''```json
-{"requirements": [{"id": "REQ-001", "ambiguity_flags": [{"category": "vague", "issue": "fast"}]}], "summary": "test"}
+{"requirements": [{"id": "REQ-001", "ambiguity_flags": [{"category": "vague"}]}],
+ "summary": "test"}
 ```'''
         result = extract_requirements_from_output(output)
         assert result is not None
@@ -141,6 +165,17 @@ Let me know if you need changes.'''
         result = extract_requirements_from_output(output)
         assert result is None
 
+    def test_extract_with_backslash_in_prose(self):
+        """Backslash in prose before JSON doesn't break parsing."""
+        output = r'''Here's the path: C:\Users\test
+
+```json
+{"requirements": [{"id": "REQ-001", "title": "Test"}], "summary": "ok"}
+```'''
+        result = extract_requirements_from_output(output)
+        assert result is not None
+        assert result["requirements"][0]["id"] == "REQ-001"
+
 
 class TestSessionState:
     """Tests for SessionState class."""
@@ -152,11 +187,7 @@ class TestSessionState:
 
         requirements = {
             "requirements": [
-                {
-                    "id": "REQ-001",
-                    "title": "Test",
-                    "ambiguity_flags": [{"category": "vague_quantifier", "severity": "warning", "issue": "fast"}],
-                }
+                _req("REQ-001", flags=[_flag("vague_quantifier", "warning", "fast")])
             ]
         }
         session.store_requirements(requirements)
@@ -169,14 +200,10 @@ class TestSessionState:
         session = SessionState()
         session.store_requirements({
             "requirements": [
-                {
-                    "id": "REQ-001",
-                    "title": "Test",
-                    "ambiguity_flags": [
-                        {"category": "vague_quantifier", "severity": "warning", "issue": "fast", "suggested_action": "define SLA"},
-                        {"category": "missing_criteria", "severity": "critical", "issue": "no AC", "suggested_action": "add AC"},
-                    ],
-                }
+                _req("REQ-001", flags=[
+                    _flag("vague_quantifier", "warning", "fast", "define SLA"),
+                    _flag("missing_criteria", "critical", "no AC", "add AC"),
+                ])
             ]
         })
 
@@ -190,14 +217,10 @@ class TestSessionState:
         session = SessionState()
         session.store_requirements({
             "requirements": [
-                {
-                    "id": "REQ-001",
-                    "title": "Test",
-                    "ambiguity_flags": [
-                        {"category": "vague_quantifier", "severity": "warning", "issue": "fast", "suggested_action": "define"},
-                        {"category": "vague_quantifier", "severity": "warning", "issue": "scalable", "suggested_action": "define"},
-                    ],
-                }
+                _req("REQ-001", flags=[
+                    _flag("vague_quantifier", "warning", "fast", "define"),
+                    _flag("vague_quantifier", "warning", "scalable", "define"),
+                ])
             ]
         })
 
@@ -214,11 +237,7 @@ class TestSessionState:
         session = SessionState()
         session.store_requirements({
             "requirements": [
-                {
-                    "id": "REQ-001",
-                    "title": "Test",
-                    "ambiguity_flags": [{"category": "vague", "severity": "warning", "issue": "test", "suggested_action": "fix"}],
-                }
+                _req("REQ-001", flags=[_flag("vague", "warning", "test", "fix")])
             ]
         })
 
@@ -239,12 +258,11 @@ class TestSessionState:
         session = SessionState()
         session.store_requirements({
             "requirements": [
-                {
-                    "id": "REQ-001",
-                    "title": "Test",
-                    "description": "Original description",
-                    "ambiguity_flags": [{"category": "vague", "severity": "warning", "issue": "test", "suggested_action": "fix"}],
-                }
+                _req(
+                    "REQ-001",
+                    description="Original description",
+                    flags=[_flag("vague", "warning", "test", "fix")],
+                )
             ]
         })
 
@@ -257,9 +275,7 @@ class TestSessionState:
         """Get requirements with clarifications injected."""
         session = SessionState()
         session.store_requirements({
-            "requirements": [
-                {"id": "REQ-001", "title": "Test", "description": "Original", "ambiguity_flags": []},
-            ]
+            "requirements": [_req("REQ-001", description="Original")]
         })
         session.clarifications["REQ-001"] = "Clarification text"
 
@@ -271,13 +287,9 @@ class TestSessionState:
         session = SessionState()
         session.store_requirements({
             "requirements": [
-                {
-                    "id": "REQ-001",
-                    "title": "Test",
-                    "ambiguity_flags": [
-                        {"category": "vague", "severity": "critical", "issue": "fast undefined", "suggested_action": "define SLA"},
-                    ],
-                }
+                _req("REQ-001", flags=[
+                    _flag("vague", "critical", "fast undefined", "define SLA"),
+                ])
             ]
         })
 
@@ -296,9 +308,7 @@ class TestHandleCommand:
         session = SessionState()
         session.store_requirements({
             "requirements": [
-                {"id": "REQ-001", "title": "Test", "ambiguity_flags": [
-                    {"category": "vague", "severity": "warning", "issue": "test", "suggested_action": "fix"}
-                ]},
+                _req("REQ-001", flags=[_flag("vague", "warning", "test", "fix")]),
             ]
         })
 
@@ -310,9 +320,7 @@ class TestHandleCommand:
         session = SessionState()
         session.store_requirements({
             "requirements": [
-                {"id": "REQ-001", "title": "Test", "ambiguity_flags": [
-                    {"category": "vague", "severity": "warning", "issue": "test", "suggested_action": "fix"}
-                ]},
+                _req("REQ-001", flags=[_flag("vague", "warning", "test", "fix")]),
             ]
         })
 
@@ -331,10 +339,10 @@ class TestHandleCommand:
         session = SessionState()
         session.store_requirements({
             "requirements": [
-                {"id": "REQ-001", "title": "Test", "ambiguity_flags": [
-                    {"category": "vague", "severity": "warning", "issue": "test", "suggested_action": "fix"},
-                    {"category": "missing", "severity": "critical", "issue": "no AC", "suggested_action": "add"},
-                ]},
+                _req("REQ-001", flags=[
+                    _flag("vague", "warning", "test", "fix"),
+                    _flag("missing", "critical", "no AC", "add"),
+                ]),
             ]
         })
 
@@ -353,9 +361,7 @@ class TestHandleCommand:
         session = SessionState()
         session.store_requirements({
             "requirements": [
-                {"id": "REQ-001", "title": "Test", "ambiguity_flags": [
-                    {"category": "vague", "severity": "warning", "issue": "test", "suggested_action": "fix"}
-                ]},
+                _req("REQ-001", flags=[_flag("vague", "warning", "test", "fix")]),
             ]
         })
 
@@ -371,8 +377,8 @@ class TestFormatters:
         """Format requirements as markdown table."""
         requirements = {
             "requirements": [
-                {"id": "REQ-001", "title": "User login", "priority": "high", "ambiguity_flags": [{"category": "vague"}]},
-                {"id": "REQ-002", "title": "Dashboard", "priority": "medium", "ambiguity_flags": []},
+                _req("REQ-001", "User login", priority="high", flags=[{"category": "vague"}]),
+                _req("REQ-002", "Dashboard", priority="medium"),
             ]
         }
         result = format_requirements_table(requirements)

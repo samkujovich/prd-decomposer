@@ -240,7 +240,8 @@ def _extract_balanced_braces(text: str, start: int) -> str | None:
             escape_next = False
             continue
 
-        if char == "\\":
+        # Backslash escaping only applies inside JSON strings
+        if char == "\\" and in_string:
             escape_next = True
             continue
 
@@ -343,7 +344,7 @@ async def run_agent_turn(
     agent: Agent,
     current_input: list[TResponseInputItem],
     verbose: bool = False
-) -> str:
+) -> tuple[str, list[TResponseInputItem]]:
     """Run a single agent turn with timeout handling.
 
     Args:
@@ -353,7 +354,7 @@ async def run_agent_turn(
         verbose: Whether to print detailed info
 
     Returns:
-        The agent's response text
+        Tuple of (final_output, updated_history)
 
     Raises:
         asyncio.TimeoutError: If the request times out
