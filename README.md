@@ -218,7 +218,7 @@ uv run python src/prd_decomposer/server.py
 ### Run Tests
 
 ```bash
-# Unit tests (305 tests, no API key required)
+# Unit tests (310 tests, no API key required)
 uv run pytest tests/ -v
 
 # With coverage report
