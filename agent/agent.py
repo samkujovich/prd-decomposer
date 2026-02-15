@@ -12,6 +12,12 @@ from agents import Agent, Runner
 from agents.items import TResponseInputItem
 from agents.mcp import MCPServerStdio, MCPServerStdioParams
 
+from agent.formatters import (
+    format_analysis_summary,
+    format_requirements_table,
+    format_ticket_summary,
+    format_tickets_hierarchy,
+)
 from agent.session_state import SessionState
 
 # Retry configuration for MCP server connection
@@ -99,11 +105,12 @@ def parse_command(user_input: str) -> tuple[str | None, int | None, str | None]:
     if match:
         return ("dismiss", int(match.group(1)), None)
 
-    # clarify N "text" or clarify N text
-    match = re.match(r'clarify\s+(\d+)\s+"([^"]+)"', user_input.strip())
+    # clarify N "text" or clarify N text (case-insensitive command, preserve text)
+    original = user_input.strip()
+    match = re.match(r'clarify\s+(\d+)\s+"([^"]+)"', original, re.IGNORECASE)
     if match:
         return ("clarify", int(match.group(1)), match.group(2))
-    match = re.match(r"clarify\s+(\d+)\s+(.+)", user_input.strip())
+    match = re.match(r"clarify\s+(\d+)\s+(.+)", original, re.IGNORECASE)
     if match:
         return ("clarify", int(match.group(1)), match.group(2))
 
@@ -136,7 +143,8 @@ def handle_command(
         amb_id = session.accept_ambiguity(index)
         if amb_id:
             remaining = len(session.get_active_ambiguities())
-            return f"Accepted ambiguity #{index}. {remaining} remaining."
+            noun = "ambiguity" if remaining == 1 else "ambiguities"
+            return f"Accepted ambiguity #{index}. {remaining} {noun} remaining."
         return f"Invalid index: {index}. Use 'ambiguities' to see the list."
 
     if command == "dismiss":
@@ -145,7 +153,8 @@ def handle_command(
         amb_id = session.dismiss_ambiguity(index)
         if amb_id:
             remaining = len(session.get_active_ambiguities())
-            return f"Dismissed ambiguity #{index}. {remaining} remaining."
+            noun = "ambiguity" if remaining == 1 else "ambiguities"
+            return f"Dismissed ambiguity #{index}. {remaining} {noun} remaining."
         return f"Invalid index: {index}. Use 'ambiguities' to see the list."
 
     if command == "clarify":
@@ -154,37 +163,113 @@ def handle_command(
         req_id = session.add_clarification(index, argument)
         if req_id:
             remaining = len(session.get_active_ambiguities())
-            return f"Added clarification to {req_id}. {remaining} ambiguities remaining."
+            noun = "ambiguity" if remaining == 1 else "ambiguities"
+            return f"Added clarification to {req_id}. {remaining} {noun} remaining."
         return f"Invalid index: {index}. Use 'ambiguities' to see the list."
 
     return f"Unknown command: {command}"
 
 
-def extract_requirements_from_output(output: str) -> dict | None:
-    """Try to extract analyze_prd JSON result from agent output.
+def _extract_json_with_key(output: str, key: str) -> dict | None:
+    """Extract JSON object containing a specific key from agent output.
 
-    The agent often includes the JSON in its response. This function
-    attempts to find and parse it.
+    Uses brace-balanced parsing for robustness with nested structures.
+
+    Args:
+        output: The agent's response text
+        key: The required key (e.g., "requirements" or "epics")
+
+    Returns:
+        Parsed dict if found and valid, None otherwise
     """
-    # Look for JSON blocks in markdown code fences
-    json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", output, re.DOTALL)
-    if json_match:
-        try:
-            data = json.loads(json_match.group(1))
-            if "requirements" in data:
-                return data
-        except json.JSONDecodeError:
-            pass
+    # Strategy 1: Look for JSON in markdown code fences
+    fence_pattern = re.compile(r"```(?:json)?\s*(\{)", re.IGNORECASE)
+    for match in fence_pattern.finditer(output):
+        start = match.start(1)
+        json_str = _extract_balanced_braces(output, start)
+        if json_str:
+            try:
+                data = json.loads(json_str)
+                if isinstance(data, dict) and key in data:
+                    return data
+            except json.JSONDecodeError:
+                continue
 
-    # Look for inline JSON with "requirements" key
-    json_match = re.search(r'(\{"requirements":\s*\[.*?\]\s*,.*?\})', output, re.DOTALL)
-    if json_match:
-        try:
-            return json.loads(json_match.group(1))
-        except json.JSONDecodeError:
-            pass
+    # Strategy 2: Look for {"key": anywhere in text
+    key_pattern = re.compile(rf'(\{{"{key}"\s*:)', re.IGNORECASE)
+    for match in key_pattern.finditer(output):
+        start = match.start(1)
+        json_str = _extract_balanced_braces(output, start)
+        if json_str:
+            try:
+                data = json.loads(json_str)
+                if isinstance(data, dict) and key in data:
+                    return data
+            except json.JSONDecodeError:
+                continue
 
     return None
+
+
+def extract_requirements_from_output(output: str) -> dict | None:
+    """Try to extract analyze_prd JSON result from agent output."""
+    return _extract_json_with_key(output, "requirements")
+
+
+def _extract_balanced_braces(text: str, start: int) -> str | None:
+    """Extract a balanced JSON object starting at the given position.
+
+    Args:
+        text: The full text to extract from
+        start: Position of the opening brace
+
+    Returns:
+        The extracted JSON string, or None if braces don't balance
+    """
+    if start >= len(text) or text[start] != "{":
+        return None
+
+    depth = 0
+    in_string = False
+    escape_next = False
+
+    for i in range(start, len(text)):
+        char = text[i]
+
+        if escape_next:
+            escape_next = False
+            continue
+
+        # Backslash escaping only applies inside JSON strings
+        if char == "\\" and in_string:
+            escape_next = True
+            continue
+
+        if char == '"':
+            in_string = not in_string
+            continue
+
+        if in_string:
+            continue
+
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+
+    return None  # Unbalanced braces
+
+
+def _is_tickets_response(output: str) -> bool:
+    """Check if output likely contains decompose_to_tickets results."""
+    return '"epics"' in output
+
+
+def _extract_tickets_from_output(output: str) -> dict | None:
+    """Try to extract decompose_to_tickets JSON result from agent output."""
+    return _extract_json_with_key(output, "epics")
 
 
 def parse_args() -> argparse.Namespace:
@@ -259,7 +344,7 @@ async def run_agent_turn(
     agent: Agent,
     current_input: list[TResponseInputItem],
     verbose: bool = False
-) -> str:
+) -> tuple[str, list[TResponseInputItem]]:
     """Run a single agent turn with timeout handling.
 
     Args:
@@ -269,7 +354,7 @@ async def run_agent_turn(
         verbose: Whether to print detailed info
 
     Returns:
-        The agent's response text
+        Tuple of (final_output, updated_history)
 
     Raises:
         asyncio.TimeoutError: If the request times out
@@ -395,24 +480,40 @@ async def main() -> None:
                 )
                 print("\r" + " " * 12 + "\r", end="")  # Clear "Thinking..."
 
+                # Always show the assistant's prose response first
+                print(f"\nAssistant: {final_output}\n")
+
                 # Try to extract and store requirements from analyze_prd results
                 extracted = extract_requirements_from_output(final_output)
                 if extracted:
                     session.store_requirements(extracted)
                     if verbose:
-                        print(f"[DEBUG] Stored {len(extracted.get('requirements', []))} requirements")
+                        reqs = extracted.get("requirements", [])
+                        print(f"[DEBUG] Stored {len(reqs)} requirements")
+
+                    # Show formatted analysis summary below the prose
+                    print("=" * 50)
+                    print(format_analysis_summary(extracted))
+                    print()
+                    print(format_requirements_table(extracted))
+                    print()
 
                     # Show ambiguity summary if any
                     ambiguities = session.get_active_ambiguities()
                     if ambiguities:
-                        print(f"\nAssistant: {final_output}")
-                        print("\n" + "=" * 40)
                         print(session.format_ambiguities_display())
-                        print("=" * 40 + "\n")
-                    else:
-                        print(f"\nAssistant: {final_output}\n")
-                else:
-                    print(f"\nAssistant: {final_output}\n")
+                    print("=" * 50 + "\n")
+
+                # Try to extract tickets from decompose_to_tickets results
+                elif _is_tickets_response(final_output):
+                    tickets = _extract_tickets_from_output(final_output)
+                    if tickets:
+                        # Show formatted ticket summary below the prose
+                        print("=" * 50)
+                        print(format_ticket_summary(tickets))
+                        print()
+                        print(format_tickets_hierarchy(tickets))
+                        print("=" * 50 + "\n")
 
                 # Update history with this turn's complete input/output
                 conversation_history = new_history
