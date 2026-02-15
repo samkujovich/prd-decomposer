@@ -2,13 +2,14 @@
 
 import hashlib
 import json
+import threading
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
 from arcade_mcp_server import MCPApp
-from openai import APIConnectionError, APIError, OpenAI, RateLimitError
+from openai import APIConnectionError, APIError, APITimeoutError, OpenAI, RateLimitError
 from pydantic import ValidationError
 
 from prd_decomposer.config import Settings, get_settings
@@ -22,7 +23,9 @@ from prd_decomposer.prompts import (
 app = MCPApp(name="prd_decomposer", version="1.0.0")
 
 # Lazy client initialization to avoid requiring API key at import time
+# Thread-safe with double-checked locking
 _client = None
+_client_lock = threading.Lock()
 
 # Allowed directories for file access (security: prevent path traversal)
 # Defaults to current working directory, can be extended via environment
@@ -83,7 +86,9 @@ def get_client() -> OpenAI:
     """Get or create OpenAI client."""
     global _client
     if _client is None:
-        _client = OpenAI()  # Uses OPENAI_API_KEY env var
+        with _client_lock:
+            if _client is None:
+                _client = OpenAI()  # Uses OPENAI_API_KEY env var
     return _client
 
 
@@ -113,6 +118,7 @@ def _call_llm_with_retry(
                 messages=messages,
                 response_format={"type": "json_object"},
                 temperature=temperature,
+                timeout=settings.llm_timeout,
             )
 
             # Extract content
@@ -144,6 +150,12 @@ def _call_llm_with_retry(
                 time.sleep(delay)
 
         except APIConnectionError as e:
+            last_error = e
+            if attempt < settings.max_retries - 1:
+                delay = settings.initial_retry_delay * (2**attempt)
+                time.sleep(delay)
+
+        except APITimeoutError as e:
             last_error = e
             if attempt < settings.max_retries - 1:
                 delay = settings.initial_retry_delay * (2**attempt)

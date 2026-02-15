@@ -1,5 +1,7 @@
 """Configuration settings for PRD Decomposer."""
 
+import threading
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -32,14 +34,25 @@ class Settings(BaseSettings):
         description="Initial delay in seconds for retry backoff (0-60)",
     )
 
+    # Timeout settings
+    llm_timeout: float = Field(
+        default=60.0,
+        gt=0,
+        le=300,
+        description="Timeout in seconds for LLM API calls (1-300)",
+    )
 
-# Singleton for convenience
+
+# Singleton for convenience (thread-safe with double-checked locking)
 _settings: Settings | None = None
+_settings_lock = threading.Lock()
 
 
 def get_settings() -> Settings:
     """Get or create Settings instance."""
     global _settings
     if _settings is None:
-        _settings = Settings()
+        with _settings_lock:
+            if _settings is None:
+                _settings = Settings()
     return _settings

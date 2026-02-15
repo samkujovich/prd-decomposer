@@ -2,12 +2,13 @@
 
 import json
 import os
+import threading
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from arcade_core.errors import FatalToolError
-from openai import APIConnectionError, APIError, RateLimitError
+from openai import APIConnectionError, APIError, APITimeoutError, RateLimitError
 
 from prd_decomposer.config import Settings
 from prd_decomposer.server import (
@@ -137,6 +138,35 @@ class TestGetClient:
 
             assert client1 is client2
             # Only called once due to caching
+            mock_openai.assert_called_once()
+
+    def test_get_client_thread_safe(self):
+        """Verify concurrent get_client calls create only one OpenAI instance."""
+        with patch("prd_decomposer.server.OpenAI") as mock_openai:
+            mock_client = MagicMock()
+            mock_openai.return_value = mock_client
+
+            import prd_decomposer.server as server_module
+
+            server_module._client = None
+
+            results: list = []
+            barrier = threading.Barrier(10)
+
+            def worker():
+                barrier.wait()
+                results.append(get_client())
+
+            threads = [threading.Thread(target=worker) for _ in range(10)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+            # All threads must get the exact same instance
+            assert len(results) == 10
+            assert all(r is results[0] for r in results)
+            # OpenAI constructor called exactly once
             mock_openai.assert_called_once()
 
 
@@ -321,6 +351,76 @@ class TestLLMRetry:
                         temperature=0.2,
                         settings=settings,
                     )
+
+    def test_call_llm_with_retry_timeout_then_success(self):
+        """Verify retry on APITimeoutError eventually succeeds."""
+        mock_response = {"result": "success"}
+        mock_usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+
+        mock_client = MagicMock()
+        # First call raises timeout, second succeeds
+        mock_client.chat.completions.create.side_effect = [
+            APITimeoutError(request=MagicMock()),
+            MagicMock(
+                choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
+                usage=mock_usage,
+            ),
+        ]
+
+        settings = Settings(initial_retry_delay=0.01, llm_timeout=30.0)
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            with patch("prd_decomposer.server.time.sleep"):
+                data, _usage = _call_llm_with_retry(
+                    [{"role": "user", "content": "test"}],
+                    temperature=0.2,
+                    settings=settings,
+                )
+
+        assert data == {"result": "success"}
+        assert mock_client.chat.completions.create.call_count == 2
+
+    def test_call_llm_with_retry_timeout_all_retries_exhausted(self):
+        """Verify LLMError raised after all timeout retries exhausted."""
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = APITimeoutError(
+            request=MagicMock()
+        )
+
+        settings = Settings(max_retries=2, initial_retry_delay=0.01, llm_timeout=30.0)
+        with patch("prd_decomposer.server.get_client", return_value=mock_client):
+            with patch("prd_decomposer.server.time.sleep"):
+                with pytest.raises(LLMError, match="failed after 2 retries"):
+                    _call_llm_with_retry(
+                        [{"role": "user", "content": "test"}],
+                        temperature=0.2,
+                        settings=settings,
+                    )
+
+        # Should be called 2 times (all retries exhausted)
+        assert mock_client.chat.completions.create.call_count == 2
+
+    def test_call_llm_with_retry_uses_timeout_setting(self):
+        """Verify timeout setting is passed to OpenAI API call."""
+        mock_response = {"result": "success"}
+        mock_usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = MagicMock(
+            choices=[MagicMock(message=MagicMock(content=json.dumps(mock_response)))],
+            usage=mock_usage,
+        )
+
+        settings = Settings(llm_timeout=45.0)
+        _call_llm_with_retry(
+            [{"role": "user", "content": "test"}],
+            temperature=0.2,
+            client=mock_client,
+            settings=settings,
+        )
+
+        # Verify timeout was passed to the API call
+        call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+        assert call_kwargs["timeout"] == 45.0
 
 
 class TestAnalyzePrd:

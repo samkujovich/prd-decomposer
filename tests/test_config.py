@@ -1,5 +1,7 @@
 """Tests for configuration settings."""
 
+import threading
+
 import pytest
 from pydantic import ValidationError
 
@@ -84,6 +86,36 @@ class TestSettings:
         assert settings_min.initial_retry_delay == 0.001
         assert settings_max.initial_retry_delay == 60
 
+    def test_settings_has_default_llm_timeout(self):
+        """Verify Settings has default llm_timeout of 60 seconds."""
+        settings = Settings()
+        assert settings.llm_timeout == 60.0
+
+    def test_settings_llm_timeout_from_env(self, monkeypatch):
+        """Verify llm_timeout loads from environment variable."""
+        monkeypatch.setenv("PRD_LLM_TIMEOUT", "120.0")
+        settings = Settings()
+        assert settings.llm_timeout == 120.0
+
+    def test_settings_llm_timeout_minimum_bound(self):
+        """Verify llm_timeout rejects zero and negative values."""
+        with pytest.raises(ValidationError):
+            Settings(llm_timeout=0)
+        with pytest.raises(ValidationError):
+            Settings(llm_timeout=-1.0)
+
+    def test_settings_llm_timeout_maximum_bound(self):
+        """Verify llm_timeout rejects values above 300."""
+        with pytest.raises(ValidationError):
+            Settings(llm_timeout=301)
+
+    def test_settings_llm_timeout_valid_bounds(self):
+        """Verify llm_timeout accepts values within bounds."""
+        settings_min = Settings(llm_timeout=0.1)
+        settings_max = Settings(llm_timeout=300)
+        assert settings_min.llm_timeout == 0.1
+        assert settings_max.llm_timeout == 300
+
 
 class TestGetSettings:
     """Tests for get_settings function."""
@@ -106,3 +138,25 @@ class TestGetSettings:
         settings2 = get_settings()
 
         assert settings1 is settings2
+
+    def test_get_settings_thread_safe(self):
+        """Verify concurrent get_settings calls return the same instance."""
+        import prd_decomposer.config as config_module
+        config_module._settings = None
+
+        results: list[Settings] = []
+        barrier = threading.Barrier(10)
+
+        def worker():
+            barrier.wait()  # All threads start at once
+            results.append(get_settings())
+
+        threads = [threading.Thread(target=worker) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # All threads must get the exact same instance
+        assert len(results) == 10
+        assert all(r is results[0] for r in results)
